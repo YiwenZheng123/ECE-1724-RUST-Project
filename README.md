@@ -15,7 +15,7 @@ We also place great emphasis on the use of tools. The interface of Ratatui can m
 We developed this application also for the purpose of learning, but this learning was based on practical operation. If we can open the application, input the complex split purchase information, compare it with the bank statement, and trust these numbers, then we have achieved the goal that we attempted to reach using Python/Java but failed to fully accomplish before: a modern, terminal-oriented, privacy-respecting financial tracking tool.
 
 
-2. **Objective and Key Features**  
+## 2. Objective and Key Features
    The objective of this project is to implement a personal finance tracker using Rust that allows users to efficiently manage their income, expenses, and accounts through a command-line interface. Meanwhile ensuring data persistence and accessibility via a secure HTTPS back-end server. The key features are listed as follows:
 
 **Core Features:**
