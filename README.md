@@ -31,7 +31,7 @@ We developed this application also for the purpose of learning, but this learnin
 *  Offline Usage and HTTPS Synchronization: Allows users to continue using the app locally while offline, with secure synchronization to the backend server once online.  
 * Budget Management: Set a monthly budget or saving goal, display remaining balance, and provide overspending reminders.  
 
-  The project is designed to be completed within the course timeframe and has multiple tasks that can be divided between three team members:   
+The project is designed to be completed within the course timeframe and has multiple tasks that can be divided between three team members:   
 * **Front-end CLI development:**    
   *  Build an interactive text-based user interface using *Ratatui*.  
   * Implement transaction input and category selection UI.  
