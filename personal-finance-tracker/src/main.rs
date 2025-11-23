@@ -106,16 +106,16 @@ async fn main() -> anyhow::Result<()> {
     // ----------------------------------------------------
     // TEST：DELETE ACCOUNT
     // ----------------------------------------------------
-    // println!("\n--- Testing: delete_account ---");
-    // let delete_success = queries::delete_account(&pool, account_id).await?;
-    // println!("   > Account deleted successfully: {}", delete_success);
-    // assert!(delete_success, "Failed to delete account!");
+    println!("\n--- Testing: delete_account ---");
+    let delete_success = queries::delete_account(&pool, account_id).await?;
+    println!("   > Account deleted successfully: {}", delete_success);
+    assert!(delete_success, "Failed to delete account!");
 
-    // // Verification for delete
-    // let get_result = queries::get_account_by_id(&pool, account_id).await;
-    // assert!(matches!(get_result, Err(sqlx::Error::RowNotFound)), "Account not deleted or queries unmatched");
+    // Verification for delete
+    let get_result = queries::get_account_by_id(&pool, account_id).await;
+    assert!(matches!(get_result, Err(sqlx::Error::RowNotFound)), "Account not deleted or queries unmatched");
 
-    // println!("\n--- All tests passed!---");
+    println!("\n--- All tests passed!---");
     Ok(())
 }
 
