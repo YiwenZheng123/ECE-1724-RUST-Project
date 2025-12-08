@@ -1,7 +1,24 @@
 // src/main.rs
-use personal_finance_tracker::cli; // crate 名= Cargo.toml 里的 name 把 - 换 _
+use std::env;
+use dotenvy::dotenv;
+use personal_finance_tracker::{backend, cli, database};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    cli::run().await
+    dotenv().ok();
+    
+    
+    let pool = database::db::connection::get_db_pool().await?;
+    
+    let args: Vec<String> = env::args().collect();
+
+    if args.len() > 1 && args[1] == "server" {
+        println!("Starting Backend Server...");
+    
+        backend::run_server(pool).await?;
+    } else {
+        println!("Starting CLI...");
+        cli::run().await?;
+    }
+    Ok(())
 }
