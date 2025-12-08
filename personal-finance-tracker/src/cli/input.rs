@@ -1,4 +1,3 @@
-/// 极简的单行输入编辑器（如果后面要做可编辑表单可以复用）
 #[derive(Default, Clone)]
 pub struct LineEdit {
     pub value: String,

@@ -9,12 +9,10 @@ use ratatui::{
 use crate::cli::state::{self, App};
 use rust_decimal::Decimal;
 
-/* ===================== 顶层渲染 ===================== */
-
 pub fn draw(f: &mut Frame, app: &mut App) {
     let size = f.size();
 
-    // 顶部 Tabs | 中间页面 | 底部状态栏
+    // top tabs | main content | Bottom status bar
     let root = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(3), Constraint::Min(10), Constraint::Length(1)])
@@ -81,7 +79,6 @@ fn draw_accounts(f: &mut Frame, area: Rect, app: &mut App) {
         .block(Block::default().borders(Borders::ALL).title("Accounts  (Up/Down, Enter→Txns, n=new, r=refresh)"))
         .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
 
-    // 关键：直接用 &mut app.accounts.sel，不要 clone/写回
     f.render_stateful_widget(list, cols[0], &mut app.accounts.sel);
 
     // Details

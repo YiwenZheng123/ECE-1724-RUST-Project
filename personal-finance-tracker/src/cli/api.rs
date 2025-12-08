@@ -22,7 +22,7 @@ impl Client {
         Ok(Self { pool })
     }
 
-    // ============= Accounts =============
+    // Accounts
 
     pub async fn list_accounts(&self) -> Result<Vec<AccountDto>> {
         let rows = sqlx::query(
@@ -142,7 +142,7 @@ impl Client {
         Ok(out)
     }
 
-    // ============= Transactions =============
+    // Transactions
 
     pub async fn list_transactions(
         &self,
@@ -283,9 +283,6 @@ impl Client {
 }
 
 
-
-
-/* ========== 辅助函数 ========== */
 
 fn map_account_type(s: &str) -> AccountType {
     if s.eq_ignore_ascii_case("checking") {
