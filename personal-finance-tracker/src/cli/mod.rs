@@ -1,7 +1,7 @@
 //! TUI front-end entry (Ratatui + Crossterm)
 //! - Creates the DB client (SQLite direct)
 //! - Sets up terminal
-//! - Runs the draw/event loop and dispatches key events to `state::App`
+
 
 use std::time::{Duration, Instant};
 
