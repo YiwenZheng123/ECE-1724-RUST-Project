@@ -940,6 +940,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "rust_decimal",
+ "serde",
  "sqlx",
  "tokio",
 ]
