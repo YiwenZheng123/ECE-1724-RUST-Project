@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Row, Table, TableState, Tabs, Cell},
     Frame,
@@ -95,17 +95,67 @@ fn draw_accounts(f: &mut Frame, area: Rect, app: &mut App) {
 
 fn draw_new_account_modal(f: &mut Frame, area: Rect, app: &mut App) {
     let fo = &app.accounts.form;
-    let lines = vec![
-        format!("Name     : {}", fo.name),
-        format!("Type     : {:?} ", fo.r#type),
-        format!("Currency : {}", fo.currency),
-        format!("Opening  : {}", fo.opening),
-        "".into(),
-        "Enter=Create   Esc=Cancel".into(),
-        fo.error.clone().unwrap_or_default(),
-    ].join("\n");
+    
+    let style_line = |idx: usize, label: &str, value: &str| -> Line {
+        if idx == fo.focus_index {
+            Line::from(vec![
+                Span::styled(" > ", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    format!("{:<9}: {}", label, value), 
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                ),
+            ])
+        } else {
+            Line::from(vec![
+                Span::raw("   "),
+                Span::raw(format!("{:<9}: {}", label, value)),
+            ])
+        }
+    };
 
-    let p = Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title("New Account"));
+    let type_str = if fo.focus_index == 1 {
+        format!("{:?}  (Use ←/→)", fo.r#type) 
+    } else {
+        format!("{:?}", fo.r#type)
+    };
+
+
+    let help_text = match fo.focus_index {
+        0 => "Enter name of the account",
+        1 => "Use Left/Right keys to change Account Type",
+        2 => "Currency code (e.g. CAD, USD, CNY)",
+        3 => "Initial Balance (Positive=Asset, Negative=Debt)",
+        _ => "",
+    };
+
+    let key_hint = if fo.focus_index == 3 {
+        "[Enter] Save/Create   [Esc] Cancel"
+    } else {
+        "[Enter] Next Field    [Esc] Cancel"
+    };
+
+    let mut lines = vec![
+        Line::from(""), 
+        style_line(0, "Name", &fo.name),
+        style_line(1, "Type", &type_str),
+        style_line(2, "Currency", &fo.currency),
+        style_line(3, "Opening", &fo.opening),
+        Line::from(""),
+        Line::from(Span::styled(" -------------------------------------------------- ", Style::default().add_modifier(Modifier::DIM))),
+        Line::from(Span::styled(format!(" Tip: {}", help_text), Style::default().fg(Color::Cyan))),
+        Line::from(""),
+
+        Line::from(Span::styled(format!(" {}", key_hint), Style::default().add_modifier(Modifier::DIM))),
+    ];
+
+    if let Some(err) = &fo.error {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(format!(" Error: {}", err), Style::default().fg(Color::Red))));
+    }
+
+    let p = Paragraph::new(lines)
+        .block(Block::default().borders(Borders::ALL).title(" New Account "));
+        
     f.render_widget(p, area);
 }
 
@@ -118,7 +168,7 @@ fn draw_txns(f: &mut Frame, area: Rect, app: &mut App) {
     let body: Vec<Row> = app.txn.table.iter().map(|t| {
         Row::new(vec![
             Cell::from(t.txn_date.to_string()),
-            Cell::from(t.category_id.map(|id| format!("#{id}")).unwrap_or_else(|| "-".into())),
+            Cell::from(format!("#{}", t.category_id)),
             Cell::from(t.memo.clone().unwrap_or_default()),
             Cell::from(fmt_money(t.amount.0)),
         ])

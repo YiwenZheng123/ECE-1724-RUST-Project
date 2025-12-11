@@ -14,14 +14,14 @@ use rust_decimal::prelude::ToPrimitive; //converting Decimal to f64
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CreateTransaction {
     pub account_id: i64,
-    pub category_id: Option<i64>,
+    pub category_id: i64,      
     pub amount: Decimal,
+    pub base_amount: Decimal,  
     pub is_expense: bool,
     pub description: Option<String>,
-    pub currency: Option<String>,
+    pub currency: String,      
     pub transacted_at: NaiveDateTime,
 }
-
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SyncRequest {
     pub last_synced_at: Option<String>,
@@ -38,25 +38,27 @@ pub async fn sync_handler(
 
     for txn in payload.transactions {
         let amount_f64 = txn.amount.to_f64().unwrap_or(0.0);
+        let base_amount_f64 = txn.base_amount.to_f64().unwrap_or(0.0);
 
         let now = chrono::Local::now().naive_local();
 
         let result = sqlx::query!(
             r#"
             INSERT INTO transactions (
-                account_id, category_id, amount, is_expense, 
+                account_id, category_id, amount, base_amount, is_expense, 
                 description, currency, transacted_at, trans_create_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
             txn.account_id,
             txn.category_id,
             amount_f64,        
+            base_amount_f64,  
             txn.is_expense,
             txn.description,
             txn.currency,
             txn.transacted_at,
-            now                
+            now
         )
         .execute(&state.db)
         .await;
