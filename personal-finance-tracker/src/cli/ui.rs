@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Row, Table, TableState, Tabs, Cell},
     Frame,
@@ -94,71 +94,32 @@ fn draw_accounts(f: &mut Frame, area: Rect, app: &mut App) {
 }
 
 fn draw_new_account_modal(f: &mut Frame, area: Rect, app: &mut App) {
-    let fo = &app.accounts.form;
-    
-    let style_line = |idx: usize, label: &str, value: &str| -> Line {
-        if idx == fo.focus_index {
-            Line::from(vec![
-                Span::styled(" > ", Style::default().fg(Color::Yellow)),
-                Span::styled(
-                    format!("{:<9}: {}", label, value), 
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
-                ),
-            ])
-        } else {
-            Line::from(vec![
-                Span::raw("   "),
-                Span::raw(format!("{:<9}: {}", label, value)),
-            ])
-        }
+    use crate::cli::state::{AccField, AccountType};
+
+    let form = &app.accounts.form;
+
+    let (m_name, m_type, m_currency, m_opening) = match form.editing {
+        Some(AccField::Name)     => ("  <editing>", "", "", ""),
+        Some(AccField::Type)     => ("", "  <editing> (use  ↑ / ↓)", "", ""),
+        Some(AccField::Currency) => ("", "", "  <editing>", ""),
+        Some(AccField::Opening)  => ("", "", "", "  <editing>"),
+        None                     => ("", "", "", ""),
     };
 
-    let type_str = if fo.focus_index == 1 {
-        format!("{:?}  (Use ←/→)", fo.r#type) 
-    } else {
-        format!("{:?}", fo.r#type)
-    };
-
-
-    let help_text = match fo.focus_index {
-        0 => "Enter name of the account",
-        1 => "Use Left/Right keys to change Account Type",
-        2 => "Currency code (e.g. CAD, USD, CNY)",
-        3 => "Initial Balance (Positive=Asset, Negative=Debt)",
-        _ => "",
-    };
-
-    let key_hint = if fo.focus_index == 3 {
-        "[Enter] Save/Create   [Esc] Cancel"
-    } else {
-        "[Enter] Next Field    [Esc] Cancel"
-    };
-
-    let mut lines = vec![
-        Line::from(""), 
-        style_line(0, "Name", &fo.name),
-        style_line(1, "Type", &type_str),
-        style_line(2, "Currency", &fo.currency),
-        style_line(3, "Opening", &fo.opening),
-        Line::from(""),
-        Line::from(Span::styled(" -------------------------------------------------- ", Style::default().add_modifier(Modifier::DIM))),
-        Line::from(Span::styled(format!(" Tip: {}", help_text), Style::default().fg(Color::Cyan))),
-        Line::from(""),
-
-        Line::from(Span::styled(format!(" {}", key_hint), Style::default().add_modifier(Modifier::DIM))),
-    ];
-
-    if let Some(err) = &fo.error {
-        lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(format!(" Error: {}", err), Style::default().fg(Color::Red))));
-    }
+    let lines = vec![
+        format!("Name     : {}{}", form.name, m_name),
+        format!("Type     : {:?}{}", form.r#type, m_type),
+        format!("Currency : {}{}", form.currency, m_currency),
+        format!("Opening  : {}{}", form.opening, m_opening),
+        "".into(),
+        "TAB: switch field | ↑/↓: change Type | Enter: create | Esc: cancel".into(),
+        form.error.clone().unwrap_or_default(),
+    ].join("\n");
 
     let p = Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title(" New Account "));
-        
+        .block(Block::default().borders(Borders::ALL).title("New Account"));
     f.render_widget(p, area);
 }
-
 // Transactions Page
 
 fn draw_txns(f: &mut Frame, area: Rect, app: &mut App) {
@@ -168,7 +129,7 @@ fn draw_txns(f: &mut Frame, area: Rect, app: &mut App) {
     let body: Vec<Row> = app.txn.table.iter().map(|t| {
         Row::new(vec![
             Cell::from(t.txn_date.to_string()),
-            Cell::from(format!("#{}", t.category_id)),
+            Cell::from(t.category_id.map(|id| format!("#{id}")).unwrap_or_else(|| "-".into())),
             Cell::from(t.memo.clone().unwrap_or_default()),
             Cell::from(fmt_money(t.amount.0)),
         ])
@@ -198,6 +159,7 @@ fn draw_txns(f: &mut Frame, area: Rect, app: &mut App) {
 // Add Transaction Page
 
 fn draw_add_txn(f: &mut Frame, area: Rect, app: &mut App) {
+    use crate::cli::state::EditField;
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
@@ -212,32 +174,43 @@ fn draw_add_txn(f: &mut Frame, area: Rect, app: &mut App) {
         };
         app.add.cat_sel.select(new_sel);
     }
-   let selected_name = app
-        .add
-        .cat_sel
-        .selected()
-        .and_then(|i| app.add.categories.get(i))
-        .map(|c| format!("{} ({:?}) {}", c.name, c.r#type, c.icon))
-        .unwrap_or_else(|| "<none>".into());
+    let selected_name = app
+            .add
+            .cat_sel
+            .selected()
+            .and_then(|i| app.add.categories.get(i))
+            .map(|c| format!("{} ({:?}) {}", c.name, c.r#type, c.icon))
+            .unwrap_or_else(|| "<none>".into());
+
+
+    let (m_date, m_payee, m_memo, m_category, m_amount) = match app.add.editing {
+        Some(EditField::Date)     => ("  <editing>", "", "", "", ""),
+        Some(EditField::Payee)    => ("", "  <editing>", "", "", ""),
+        Some(EditField::Memo)     => ("", "", "  <editing>", "", ""),
+        Some(EditField::Category) => ("", "", "", "  <editing> (↑/↓ to choose)", ""),
+        Some(EditField::Amount)   => ("", "", "", "", "  <editing>"),
+        None                      => ("", "", "", "", ""),
+    };
+
 
     let left_lines = vec![
         format!("Account : {:?}", app.add.account_id),
-        format!("Date    : {}", app.add.date),
-        format!("Payee   : {}", app.add.payee),
-        format!("Memo    : {}", app.add.memo),
-        format!("Category: {}   (↑/↓ select)", selected_name),
+        format!("Date    : {}{}",   app.add.date,   m_date),
+        format!("Payee   : {}{}",   app.add.payee,  m_payee),
+        format!("Memo    : {}{}",   app.add.memo,   m_memo),
+        format!("Category: {}{}",   selected_name,  m_category), 
         format!(
-            "Amount  : {}  [{}]",
+            "Amount  : {}{}  [{}]",
             app.add.amount,
+            m_amount,
             if app.add.is_expense { "Expense (-)" } else { "Income (+)" }
         ),
-        "".into(),
-        "Edit: p=Payee, a=Amount, m=Memo, d=Date, Tab/Shift-Tab switch field".into(),
+        String::new(),
+        "Edit: p=Payee, a=Amount, m=Memo, d=Date, c=Category; Tab switch field".into(),
         "Actions: s=Save, b/Esc=Back, t=Toggle income/expense".into(),
         app.add.error.clone().unwrap_or_default(),
         app.add.success.clone().unwrap_or_default(),
     ].join("\n");
-
     let left = Paragraph::new(left_lines)
         .block(Block::default().borders(Borders::ALL).title("Add Transaction"));
     f.render_widget(left, cols[0]);
