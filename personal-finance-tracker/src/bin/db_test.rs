@@ -1,8 +1,9 @@
 
 use dotenvy::dotenv;
-use crate::database::db::connection::get_db_pool;
-use crate::database::db::queries;
-use crate::database::models::{Budget, SavingsGoal};
+use personal_finance_tracker::database::db::connection::get_db_pool;
+use personal_finance_tracker::database::db::queries;
+use personal_finance_tracker::database::models::{Budget, SavingsGoal};
+
 use rust_decimal::Decimal;
 use chrono::NaiveDateTime;
 use std::str::FromStr;
@@ -32,6 +33,7 @@ async fn main() -> anyhow::Result<()> {
     let rate = queries::get_rate(&pool, "USD").await?;
     println!("CAD/USD = {}", rate);
 
+
     // ----------------------------------------------------
     // TEST：CREATE ACCOUNT
     // ----------------------------------------------------
@@ -47,6 +49,7 @@ async fn main() -> anyhow::Result<()> {
     let fetched_account = queries::get_account_by_id(&pool, account_id_to_check).await?;
     println!("   > Acquired account: {:?}", fetched_account);
     assert_eq!(fetched_account.account_name, initial_acc_name, "account id not matched");
+
 
     println!("\n--- Testing: get_all_accounts ---");
     let account_num  = queries::get_all_accounts(&pool).await?;
@@ -79,12 +82,14 @@ async fn main() -> anyhow::Result<()> {
     let cat_icon = "🛒";
 
     /*Note!!! did not check for duplicate when adding new category */
+
     println!("\n--- Testing: create_category ---");
     let category_id = queries::create_category(&pool, cat_name, cat_type, cat_icon).await?;
     println!("   > Category created successfully, ID: {}", category_id);
     assert!(category_id > 0, "Failed to create Category, ID invalid!");
 
     println!("\n--- Testing: get_all_categories ---");
+
     let category_num  = queries::get_all_categories(&pool).await?;
     println!("   > Number of category: {:?}", category_num.len());
     // assert_eq!(category_num.len(), 1, "number of category unmatched!");
@@ -235,6 +240,7 @@ async fn main() -> anyhow::Result<()> {
     // let get_result = queries::get_account_by_id(&pool, account_id).await;
     // assert!(matches!(get_result, Err(sqlx::Error::RowNotFound)), "Account not deleted or queries unmatched");
 
+
     println!("\n--- All tests passed!---");
     Ok(())
 }
@@ -243,3 +249,4 @@ async fn main() -> anyhow::Result<()> {
 /* commands for manipulate database */
 //cargo sqlx migrate run
 //cargo sqlx database reset
+

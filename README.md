@@ -45,3 +45,49 @@ The project is designed to be completed within the course timeframe and has mult
   * Implement complex transaction handling.  
   * Support budget tracking, storing recurring transactions.  
   * Build data aggregation queries for financial reports and savings goals.
+
+## 3. Tentative Plan
+
+The project will be completed in four main phases from **October 6** to around **December 12, 2025**.  
+We plan to finish all coding work a few days before the official deadline so that we have time to record the presentation video and prepare the final report.
+
+### **Phase 1 (Oct 6 – Oct 20): Setup and Design**
+* Focus on setting up the Rust workspace, database, and overall project structure.  
+* Decide how the CLI, backend, and database communicate with each other.  
+* Ensure everyone can build and run the code locally.  
+**Deliverable:** A working project skeleton with backend and frontend parts running.  
+**Target:** Around Oct 20.
+
+
+### **Phase 2 (Oct 21 – Nov 10): Backend and CLI Basics**
+* **Yiwen** – Build the backend using *Axum* and *SQLx*, adding basic APIs for accounts and transactions.  
+* **Tianchen** – Develop the *Ratatui* interface so users can add and view records from the terminal.  
+* **Yuhan** – Handle data models and queries for storing and reading financial data.  
+**Deliverable:** Transactions can be added, stored, and displayed correctly.  
+**Target:** Around Nov 10.
+
+
+### **Phase 3 (Nov 11 – Nov 30): Advanced Features and Synchronization**
+* Add features like offline mode, synchronization, budgets, and multi-currency support.  
+* **Yiwen** – Implement HTTPS synchronization and handle conflicts.  
+* **Tianchen** – Add reports and dashboards.  
+* **Yuhan** – Implement recurring transactions and currency conversions.  
+**Deliverable:** The app supports advanced functions and runs smoothly across components.  
+**Target:** Around Nov 30.
+
+
+### **Phase 4 (Dec 1 – Dec 10): Testing and Presentation Preparation**
+* Test and polish everything, fix small bugs, and ensure good performance.  
+* Write the final report, prepare demo data, and record the video presentation together.  
+**Deliverable:** Stable final version, report, and recorded presentation video.  
+**Target:** Finish before Dec 10–12 (final due date is Dec 15).
+
+
+### **Responsibilities**
+* **Yiwen Zheng:** Backend (Axum, SQLx, HTTPS)  
+* **Tianchen Lan:** CLI/TUI interface (Ratatui)  
+* **Yuhan Cui:** Data logic, budgets, and reports  
+
+We will meet briefly every week to check progress and merge updates, ensuring we stay on track and don’t have to rush in the final week.
+
+
