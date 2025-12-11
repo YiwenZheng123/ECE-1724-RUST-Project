@@ -1,0 +1,10 @@
+C:\Users\Bruce Lan\Desktop\UOT\Github\ECE-1724-RUST-Project\personal-finance-tracker\target\debug\deps\castaway-3aa7af1a50a78d5e.d: C:\Users\Bruce\ Lan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\castaway-0.2.4\src\lib.rs C:\Users\Bruce\ Lan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\castaway-0.2.4\src\internal.rs C:\Users\Bruce\ Lan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\castaway-0.2.4\src\lifetime_free.rs C:\Users\Bruce\ Lan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\castaway-0.2.4\src\utils.rs
+
+C:\Users\Bruce Lan\Desktop\UOT\Github\ECE-1724-RUST-Project\personal-finance-tracker\target\debug\deps\libcastaway-3aa7af1a50a78d5e.rlib: C:\Users\Bruce\ Lan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\castaway-0.2.4\src\lib.rs C:\Users\Bruce\ Lan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\castaway-0.2.4\src\internal.rs C:\Users\Bruce\ Lan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\castaway-0.2.4\src\lifetime_free.rs C:\Users\Bruce\ Lan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\castaway-0.2.4\src\utils.rs
+
+C:\Users\Bruce Lan\Desktop\UOT\Github\ECE-1724-RUST-Project\personal-finance-tracker\target\debug\deps\libcastaway-3aa7af1a50a78d5e.rmeta: C:\Users\Bruce\ Lan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\castaway-0.2.4\src\lib.rs C:\Users\Bruce\ Lan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\castaway-0.2.4\src\internal.rs C:\Users\Bruce\ Lan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\castaway-0.2.4\src\lifetime_free.rs C:\Users\Bruce\ Lan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\castaway-0.2.4\src\utils.rs
+
+C:\Users\Bruce\ Lan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\castaway-0.2.4\src\lib.rs:
+C:\Users\Bruce\ Lan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\castaway-0.2.4\src\internal.rs:
+C:\Users\Bruce\ Lan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\castaway-0.2.4\src\lifetime_free.rs:
+C:\Users\Bruce\ Lan\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\castaway-0.2.4\src\utils.rs:

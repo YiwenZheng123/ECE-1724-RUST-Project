@@ -1,9 +1,7 @@
-// src/cli/api.rs
 use anyhow::Result;
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
-use std::str::FromStr;
 
 use super::state::{
     AccountDto, AccountType, BalanceDto, CategoryDto, CategoryType,
@@ -30,11 +28,11 @@ impl Client {
         let rows = sqlx::query(
             r#"
             SELECT
-              account_id        AS id,
-              account_name      AS name,
-              account_type      AS atype,
-              currency          AS currency,
-              balance           AS balance,
+              account_id         AS id,
+              account_name       AS name,
+              account_type       AS atype,
+              currency           AS currency,
+              balance            AS balance,
               account_created_at AS created_at
             FROM accounts
             ORDER BY account_id
@@ -70,11 +68,11 @@ impl Client {
             INSERT INTO accounts (account_name, account_type, balance, currency, account_created_at)
             VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
             RETURNING
-              account_id        AS id,
-              account_name      AS name,
-              account_type      AS atype,
-              currency          AS currency,
-              balance           AS balance,
+              account_id         AS id,
+              account_name       AS name,
+              account_type       AS atype,
+              currency           AS currency,
+              balance            AS balance,
               account_created_at AS created_at
             "#,
         )
@@ -110,6 +108,31 @@ impl Client {
         Ok(BalanceDto { account_id, balance: Money(bal) })
     }
 
+    async fn recompute_account_balance(&self, account_id: i64) -> anyhow::Result<()> {
+    sqlx::query!(
+        r#"
+        UPDATE accounts
+        SET balance = IFNULL((
+            SELECT ROUND(SUM(
+                CASE WHEN t.is_expense = 1
+                     THEN -CAST(t.amount AS NUMERIC)
+                     ELSE  CAST(t.amount AS NUMERIC)
+                END
+            ), 2)
+            FROM transactions t
+            WHERE t.account_id = ?
+        ), 0.00)
+        WHERE account_id = ?
+        "#,
+        account_id, account_id
+    )
+    .execute(&self.pool)
+    .await?;
+    Ok(())
+}
+
+
+    // Categories
 
     pub async fn list_categories(&self) -> Result<Vec<CategoryDto>> {
         let rows = sqlx::query(
@@ -158,7 +181,6 @@ impl Client {
               t.account_id     AS account_id,
               t.category_id    AS category_id,
               t.amount         AS amount,
-              t.base_amount    AS base_amount,  -- Added base_amount
               t.is_expense     AS is_expense,
               t.description    AS memo,
               t.currency       AS currency,
@@ -180,9 +202,8 @@ impl Client {
         for r in rows {
             let id: i64 = r.try_get("id")?;
             let acc: i64 = r.try_get("account_id")?;
-            let cat: i64 = r.try_get("category_id")?; 
+            let cat: Option<i64> = r.try_get("category_id")?;
             let amount_s: String = r.try_get("amount")?;
-            let base_amount_s: String = r.try_get("base_amount").unwrap_or_else(|_| amount_s.clone()); 
             let is_expense_i: i64 = r.try_get("is_expense")?;
             let memo: Option<String> = r.try_get("memo")?;
             let currency: Option<String> = r.try_get("currency")?;
@@ -191,15 +212,11 @@ impl Client {
             let mut amt = Decimal::from_str_exact(&amount_s).unwrap_or(Decimal::ZERO);
             if is_expense_i != 0 { amt = -amt; }
 
-            let mut base_amt = Decimal::from_str_exact(&base_amount_s).unwrap_or(Decimal::ZERO);
-            if is_expense_i != 0 { base_amt = -base_amt; }
-
             out.push(TransactionDto {
                 id,
                 account_id: acc,
                 category_id: cat,
                 amount: Money(amt),
-                base_amount: Money(base_amt), 
                 memo,
                 currency: currency.unwrap_or_else(|| "CAD".into()),
                 txn_date: parse_date_any(&txn_date_s),
@@ -213,19 +230,17 @@ impl Client {
     pub async fn create_transaction(&self, req: &CreateTxnReq) -> Result<TransactionDto> {
         let is_expense = if req.amount.0.is_sign_negative() { 1 } else { 0 };
         let amount_abs = req.amount.0.abs().to_string();
-        let base_amount_abs = req.base_amount.0.abs().to_string(); 
 
         let row = sqlx::query(
             r#"
             INSERT INTO transactions
-              (account_id, category_id, amount, base_amount, is_expense, description, currency, transacted_at, trans_create_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+              (account_id, category_id, amount, is_expense, description, currency, transacted_at, trans_create_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
             RETURNING
               transaction_id AS id,
               account_id     AS account_id,
               category_id    AS category_id,
               amount         AS amount,
-              base_amount    AS base_amount,
               is_expense     AS is_expense,
               description    AS memo,
               currency       AS currency,
@@ -235,7 +250,6 @@ impl Client {
         .bind(req.account_id)
         .bind(req.category_id)
         .bind(amount_abs)
-        .bind(base_amount_abs) 
         .bind(is_expense)
         .bind(req.memo.as_deref()) 
         .bind(&req.currency)
@@ -243,22 +257,18 @@ impl Client {
         .fetch_one(&self.pool)
         .await?;
 
+        self.recompute_account_balance(req.account_id).await?;
+
         let amount_s: String = row.try_get("amount")?;
-        let base_amount_s: String = row.try_get("base_amount")?; 
         let is_expense_i: i64 = row.try_get("is_expense")?;
-        
         let mut amt = Decimal::from_str_exact(&amount_s).unwrap_or(Decimal::ZERO);
         if is_expense_i != 0 { amt = -amt; }
-
-        let mut base_amt = Decimal::from_str_exact(&base_amount_s).unwrap_or(Decimal::ZERO);
-        if is_expense_i != 0 { base_amt = -base_amt; }
 
         Ok(TransactionDto {
             id: row.try_get("id")?,
             account_id: row.try_get("account_id")?,
             category_id: row.try_get("category_id")?,
             amount: Money(amt),
-            base_amount: Money(base_amt),
             memo: row.try_get("memo")?,
             currency: row.try_get::<Option<String>, _>("currency")?.unwrap_or_else(|| "CAD".into()),
             txn_date: parse_date_any(&row.try_get::<String, _>("txn_date")?),
@@ -269,6 +279,13 @@ impl Client {
 
 
     pub async fn delete_transaction(&self, transaction_id: i64) -> anyhow::Result<()> {
+        let (account_id,): (i64,) = sqlx::query_as(
+            r#"SELECT account_id FROM transactions WHERE transaction_id = ?"#,
+        )
+        .bind(transaction_id)
+        .fetch_one(&self.pool)
+        .await?;
+
         sqlx::query!(
             r#"DELETE FROM transactions WHERE transaction_id = ?"#,
             transaction_id
@@ -276,27 +293,12 @@ impl Client {
         .execute(&self.pool)
         .await?;
 
-        sqlx::query!(
-            r#"
-            UPDATE accounts
-            SET balance = IFNULL((
-              SELECT ROUND(SUM(
-                CASE WHEN t.is_expense = 1
-                     THEN -CAST(t.amount AS NUMERIC)
-                     ELSE  CAST(t.amount AS NUMERIC)
-                END
-              ), 2)
-              FROM transactions t
-              WHERE t.account_id = accounts.account_id
-            ), 0.00)
-            "#
-        )
-        .execute(&self.pool)
-        .await?;
-
+        self.recompute_account_balance(account_id).await?;
         Ok(())
     }
 }
+
+
 
 fn map_account_type(s: &str) -> AccountType {
     if s.eq_ignore_ascii_case("checking") {
