@@ -44,9 +44,9 @@ pub async fn run() -> Result<()> {
 
         if event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
-                if key.code == KeyCode::Char('q') {
-                    break;
-                }
+                //if key.code == KeyCode::Char('q') {
+                //    break;
+                //}
                 app.handle_key(key).await?;
             }
         }
