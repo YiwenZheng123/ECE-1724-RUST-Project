@@ -6,13 +6,14 @@ use chrono::NaiveDateTime;
 
 #[derive(FromRow, Debug)]
 pub struct Transaction {
-    pub transaction_id: i64,                //key
+    pub transaction_id: i64,
     pub account_id: i64,
-    pub category_id: Option<i64>,
+    pub category_id: i64,
     pub amount: Decimal,
+    pub base_amount: Decimal,
     pub is_expense: bool,
     pub description: Option<String>,
-    pub currency: Option<String>,
-    pub transacted_at: NaiveDateTime,
+    pub currency: String,
+    pub transacted_at: NaiveDateTime,   // scheduled transaction time
     pub trans_create_at: NaiveDateTime,
 }
