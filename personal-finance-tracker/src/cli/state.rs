@@ -49,7 +49,7 @@ pub struct AccountDto {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CategoryType {
     Income,
     Expense,
@@ -128,6 +128,8 @@ pub struct AccountsPage {
     pub sel: ListState,
     pub creating: bool,
     pub form: AccountForm,
+    pub editing_id: Option<i64>,   
+    pub show_delete_confirm: bool,
 }
 
 // Transactions 
@@ -363,72 +365,124 @@ impl App {
             }
         }
         match self.tab {
-            Tab::Accounts => {
-                // Editing mode
-                if self.accounts.creating {
-                    use crossterm::event::KeyCode;
-                    use crate::cli::state::{AccField, AccountType};
-                    match k.code {
-                        KeyCode::Char(c) => {
-                            if let Some(f) = self.accounts.form.editing {
-                                match f {
-                                    AccField::Name     => self.accounts.form.name.push(c),
-                                    AccField::Currency => self.accounts.form.currency.push(c),
-                                    AccField::Opening  => self.accounts.form.opening.push(c),
-                                    AccField::Type     => {} // Type uses c/↑/↓ to cycle
+           Tab::Accounts => {
+            if self.accounts.show_delete_confirm {
+                match k.code {
+                    KeyCode::Char('y') | KeyCode::Enter => {
+                        if let Some(idx) = self.accounts.sel.selected() {
+                            if let Some(acc) = self.accounts.list.get(idx) {
+                                if let Err(e) = self.api.delete_account(acc.id).await {
+                                    self.status = format!("Delete failed: {}", e);
+                                } else {
+                                    self.status = "Account deleted.".to_string();
+                                    self.refresh_accounts().await.ok();
+                                    let len = self.accounts.list.len(); 
+                                    if len > 0 {
+                                        self.accounts.sel.select(Some(len - 1));
+                                    } else {
+                                        self.accounts.sel.select(None);
+                                    }
                                 }
                             }
                         }
-                        KeyCode::Backspace => {
-                            if let Some(f) = self.accounts.form.editing {
-                                match f {
-                                    AccField::Name     => { self.accounts.form.name.pop(); }
-                                    AccField::Currency => { self.accounts.form.currency.pop(); }
-                                    AccField::Opening  => { self.accounts.form.opening.pop(); }
-                                    AccField::Type     => {}
+                        self.accounts.show_delete_confirm = false;
+                    }
+                    KeyCode::Char('n') | KeyCode::Esc => {
+                        self.accounts.show_delete_confirm = false;
+                        self.status = "Delete cancelled.".to_string();
+                    }
+                    _ => {}
+                }
+                return Ok(());
+            }
+
+            
+            if self.accounts.creating {
+                use crossterm::event::KeyCode;
+                use crate::cli::state::{AccField, AccountType};
+                match k.code {
+                    KeyCode::Char(c) => {
+                        if let Some(f) = self.accounts.form.editing {
+                            match f {
+                                AccField::Name     => self.accounts.form.name.push(c),
+                                AccField::Currency => self.accounts.form.currency.push(c),
+                                AccField::Opening  => {
+                                    if self.accounts.editing_id.is_none() {
+                                        self.accounts.form.opening.push(c)
+                                    }
+                                },
+                                AccField::Type     => {} 
+                            }
+                        }
+                    }
+                    KeyCode::Backspace => {
+                        if let Some(f) = self.accounts.form.editing {
+                            match f {
+                                AccField::Name     => { self.accounts.form.name.pop(); }
+                                AccField::Currency => { self.accounts.form.currency.pop(); }
+                                AccField::Opening  => { 
+                                    if self.accounts.editing_id.is_none() {
+                                        self.accounts.form.opening.pop(); 
+                                    }
                                 }
+                                AccField::Type     => {}
                             }
                         }
-                        KeyCode::Tab => {
-                            let cur = self.accounts.form.editing.unwrap_or(AccField::Name);
-                            self.accounts.form.editing = Some(self.acc_next_field(cur));
+                    }
+                    KeyCode::Tab => {
+                        let cur = self.accounts.form.editing.unwrap_or(AccField::Name);
+                        self.accounts.form.editing = Some(self.acc_next_field(cur));
+                    }
+                    KeyCode::Up => {
+                    if matches!(self.accounts.form.editing, Some(AccField::Type)) {
+                        self.accounts.form.r#type = self.cycle_account_type(self.accounts.form.r#type, true);
+                    }
+                    }
+                    KeyCode::Down => {
+                        if matches!(self.accounts.form.editing, Some(AccField::Type)) {
+                            self.accounts.form.r#type = self.cycle_account_type(self.accounts.form.r#type, false);
                         }
-                        KeyCode::Up => {
-                           if matches!(self.accounts.form.editing, Some(AccField::Type)) {
-                                self.accounts.form.r#type = self.cycle_account_type(self.accounts.form.r#type, true);
+                    }
+                    KeyCode::Esc => {
+                        self.accounts.creating = false;
+                        self.accounts.editing_id = None; 
+                        self.accounts.form.error = None;
+                        self.accounts.form.editing = None;
+                    }
+                    KeyCode::Enter => {
+                        let name = self.accounts.form.name.trim();
+                        if name.is_empty() {
+                            self.accounts.form.error = Some("Name cannot be empty".into());
+                            return Ok(());
+                        }
+
+                        if let Some(edit_id) = self.accounts.editing_id {
+                            match self.api.update_account(
+                                edit_id, 
+                                name, 
+                                self.accounts.form.r#type.as_str(), 
+                                &self.accounts.form.currency
+                            ).await {
+                                Ok(_) => {
+                                    self.status = "Account updated.".to_string();
+                                    self.accounts.creating = false;
+                                    self.accounts.editing_id = None;
+                                    self.refresh_accounts().await.ok();
+                                }
+                                Err(e) => self.accounts.form.error = Some(e.to_string()),
                             }
-                        }
-                        KeyCode::Down => {
-                            if matches!(self.accounts.form.editing, Some(AccField::Type)) {
-                                self.accounts.form.r#type = self.cycle_account_type(self.accounts.form.r#type, false);
-                            }
-                        }
-                        KeyCode::Esc => {
-                            self.accounts.creating = false;
-                            self.accounts.form.error = None;
-                            self.accounts.form.editing = None;
-                        }
-                        KeyCode::Enter => {
-                            let name = self.accounts.form.name.trim();
-                            if name.is_empty() {
-                                self.accounts.form.error = Some("Name cannot be empty".into());
-                                return Ok(());
-                            }
+                        } else {
                             let opening = match Decimal::from_str_exact(self.accounts.form.opening.trim()) {
                                 Ok(d) => d,
                                 Err(_) => {
-                                    self.accounts.form.error = Some("Opening must be a valid number".into());
+                                    self.accounts.form.error = Some("Invalid opening balance".into());
                                     return Ok(());
                                 }
                             };
                             let req = CreateAccountReq {
                                 name: name.to_string(),
                                 r#type: self.accounts.form.r#type,
-                                currency: if self.accounts.form.currency.trim().is_empty() {
-                                    "CAD".into()
-                                } else {
-                                    self.accounts.form.currency.trim().to_uppercase()
-                                },
+                                currency: if self.accounts.form.currency.trim().is_empty() { "CAD".into() } else { self.accounts.form.currency.trim().to_uppercase() },
                                 opening_balance: Money(opening),
                             };
                             match self.api.create_account(&req).await {
@@ -437,49 +491,72 @@ impl App {
                                     self.accounts.form.editing = None;
                                     self.refresh_accounts().await.ok();
                                     if !self.accounts.list.is_empty() {
-                                        self.accounts
-                                            .sel
-                                            .select(Some(self.accounts.list.len().saturating_sub(1)));
+                                        self.accounts.sel.select(Some(self.accounts.list.len().saturating_sub(1)));
                                     }
                                     self.status = "Account created.".into();
                                 }
                                 Err(e) => {
+                                    eprintln!(">>> DB Error: {:?}", e);
                                     self.accounts.form.error = Some(format!("Create failed: {e}"));
                                 }
                             }
                         }
-                        _ => {}
                     }
-                    return Ok(()); 
-                }
-
-                // Normal Accounts 
-                match k.code {
-                    KeyCode::Up => self.move_account(-1),
-                    KeyCode::Down => self.move_account(1),
-                    KeyCode::Enter => {
-                        self.tab = Tab::Transactions;
-                        self.txn.account_id = self.current_account_id();
-                        self.refresh_txns().await.ok();
-                    }
-                    KeyCode::Char('n') => {
-                        self.tab = Tab::Accounts;
-                        self.accounts.creating = true;
-                        self.accounts.form = AccountForm {
-                            name: String::new(),
-                            currency: "CAD".into(),
-                            opening: "0".into(),
-                            r#type: AccountType::Cash,
-                            error: None,
-                            editing: Some(AccField::Name),
-                        };
-                    }
-                    KeyCode::Char('r') => { self.refresh_accounts().await.ok(); }
-                    KeyCode::Char('?') => { self.tab = Tab::Help; }
-                    KeyCode::Esc => { /* no-op in normal mode */ }
                     _ => {}
                 }
+                return Ok(()); 
             }
+
+            match k.code {
+                KeyCode::Up => self.move_account(-1),
+                KeyCode::Down => self.move_account(1),
+                KeyCode::Enter => {
+                    self.tab = Tab::Transactions;
+                    self.txn.account_id = self.current_account_id();
+                    self.refresh_txns().await.ok();
+                }
+                KeyCode::Char('n') => {
+                    self.accounts.creating = true;
+                    self.accounts.editing_id = None; 
+                    self.accounts.form = AccountForm {
+                        name: String::new(),
+                        currency: "CAD".into(),
+                        opening: "0".into(),
+                        r#type: AccountType::Cash,
+                        error: None,
+                        editing: Some(AccField::Name),
+                    };
+                }
+                
+                KeyCode::Char('e') => {
+                    if let Some(idx) = self.accounts.sel.selected() {
+                        if let Some(acc) = self.accounts.list.get(idx) {
+                            self.accounts.creating = true;
+                            self.accounts.editing_id = Some(acc.id);
+                        
+                            self.accounts.form = AccountForm {
+                                name: acc.name.clone(),
+                                currency: acc.currency.clone(),
+                                opening: acc.opening_balance.0.to_string(),
+                                r#type: acc.r#type,
+                                error: None,
+                                editing: Some(AccField::Name),
+                            };
+                        }
+                    }
+                }
+              
+                KeyCode::Char('d') | KeyCode::Delete => {
+                    if self.accounts.sel.selected().is_some() {
+                        self.accounts.show_delete_confirm = true;
+                    }
+                }
+                KeyCode::Char('r') => { self.refresh_accounts().await.ok(); }
+                KeyCode::Char('?') => { self.tab = Tab::Help; }
+                KeyCode::Esc => { /* no-op */ }
+                _ => {}
+            }
+        }
         Tab::Transactions => match k.code {
             KeyCode::Up   => self.move_txn(-1),
             KeyCode::Down => self.move_txn(1),
@@ -696,7 +773,7 @@ impl App {
         };
 
 
-        match self.api.create_transaction(&req).await {
+       match self.api.create_transaction(&req).await {
             Ok(_) => {
                 self.add.success = Some("Saved! ✓".into());
                 self.add.error = None;
@@ -704,6 +781,10 @@ impl App {
                 self.add.memo.clear();
                 self.refresh_txns().await.ok();
                 self.refresh_accounts().await.ok(); 
+
+                //let sync_res = self.api.trigger_sync().await;
+                self.status = "Sync feature not implemented yet".to_string();
+               
             }
             Err(e) => {
                 eprintln!("DEBUG: API Error: {:?}", e);

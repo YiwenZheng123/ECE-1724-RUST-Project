@@ -1,34 +1,44 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Row, Table, TableState, Tabs, Cell},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Row, Table, TableState, Tabs, Cell, Wrap},
     Frame,
 };
 
-use crate::cli::state::{self, App};
+use crate::cli::state::{self, App, AccField, EditField}; 
 use rust_decimal::Decimal;
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     let size = f.size();
 
-    // top tabs | main content | Bottom status bar
     let root = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(10)])
+        .constraints([
+            Constraint::Length(3), 
+            Constraint::Min(10), 
+            Constraint::Length(3) 
+        ])
         .split(size);
 
     // Tabs
-    let titles = ["Accounts", "Transactions", "AddTransaction", "Help"]
+    let titles = ["Accounts", "Transactions", "AddTxn", "Help"]
         .into_iter()
         .map(|t| Line::from(Span::raw(t)))
         .collect::<Vec<_>>();
+    
     let tabs = Tabs::new(titles)
-        .select(match app.tab { state::Tab::Accounts => 0, state::Tab::Transactions => 1, state::Tab::AddTxn => 2, state::Tab::Help => 3 })
-        .block(Block::default().borders(Borders::ALL).title("Finance Tracker"))
-        .highlight_style(Style::default().add_modifier(Modifier::BOLD));
+        .select(match app.tab { 
+            state::Tab::Accounts => 0, 
+            state::Tab::Transactions => 1, 
+            state::Tab::AddTxn => 2, 
+            state::Tab::Help => 3 
+        })
+        .block(Block::default().borders(Borders::ALL).title(" Finance Tracker "))
+        .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)); 
     f.render_widget(tabs, root[0]);
 
+    // Main Content
     match app.tab {
         state::Tab::Accounts => draw_accounts(f, root[1], app),
         state::Tab::Transactions => draw_txns(f, root[1], app),
@@ -36,15 +46,58 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         state::Tab::Help => draw_help(f, root[1]),
     }
 
+    let status_text = format!(" Status: {} ", app.status);
+    let status = Paragraph::new(status_text)
+        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
+    f.render_widget(status, root[2]);
+
+  
     if app.accounts.creating {
-        let area = center_rect(root[1], 54, 12);
+        let area = center_rect(root[1], 60, 14); 
         f.render_widget(Clear, area);
         draw_new_account_modal(f, area, app);
+    }
+
+    if app.accounts.show_delete_confirm {
+        let area = center_rect(root[1], 40, 10);
+        
+        f.render_widget(Clear, area); 
+        
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Red))
+            .title(Span::styled(" WARNING ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD).add_modifier(Modifier::SLOW_BLINK)))
+            .title_alignment(ratatui::layout::Alignment::Center)
+            .style(Style::default().bg(Color::Black)); 
+
+        let text = vec![
+            Line::from(""),
+            Line::from(Span::styled("Are you sure you want to", Style::default().fg(Color::White))),
+            Line::from(Span::styled("DELETE this account?", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))),
+            Line::from(""),
+            Line::from(Span::raw("All transactions will be lost!")),
+            Line::from(""),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("[Enter/y] ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                Span::raw("Yes, Delete"),
+            ]),
+            Line::from(vec![
+                Span::styled("[Esc/n]   ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::raw("Cancel"),
+            ]),
+        ];
+        
+
+        let p = Paragraph::new(text)
+            .block(block)
+            .alignment(ratatui::layout::Alignment::Center); 
+            
+        f.render_widget(p, area);
     }
 }
 
 // Accounts Page
-
 fn draw_accounts(f: &mut Frame, area: Rect, app: &mut App) {
     let cols = Layout::default()
         .direction(Direction::Horizontal)
@@ -53,89 +106,156 @@ fn draw_accounts(f: &mut Frame, area: Rect, app: &mut App) {
 
     // Account List
     let items: Vec<ListItem> = app.accounts.list.iter().map(|a| {
+       
+        let balance_color = if a.opening_balance.0.is_sign_negative() { Color::Red } else { Color::Green };
+        
         let line = Line::from(vec![
-            Span::raw(format!("{}  ", a.name)),
-            Span::raw("["), Span::raw(format!("{:?}", a.r#type)), Span::raw("]  "),
-            Span::raw(a.currency.clone()), Span::raw("  "),
-            Span::raw(fmt_money(a.opening_balance.0)),
+            Span::styled(format!("{:<20}", a.name), Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(" ["), 
+            Span::styled(format!("{:?}", a.r#type), Style::default().fg(Color::Cyan)), 
+            Span::raw("] "),
+            Span::raw(format!("{} ", a.currency)),
+            Span::styled(fmt_money(a.opening_balance.0), Style::default().fg(balance_color)),
         ]);
         ListItem::new(line)
     }).collect();
 
-    let len = app.accounts.list.len();
-    if let Some(i) = app.accounts.sel.selected() {
-        if i >= len {
-            app.accounts.sel.select(if len == 0 { None } else { Some(len - 1) });
-        }
-    } else if len > 0 {
-        app.accounts.sel.select(Some(0));
-    }
-
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title("Accounts  (Up/Down, Enter→Txns, n=new, r=refresh)"))
-        .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+        .block(Block::default().borders(Borders::ALL).title(" Accounts (n:New e:Edit d:Del Enter:Txns) "))
+        .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD));
 
     f.render_stateful_widget(list, cols[0], &mut app.accounts.sel);
 
     // Details
     let right = if let Some(acc) = app.current_account() {
-        Paragraph::new(format!(
-            "ID: {}\nName: {}\nType: {:?}\nCurrency: {}\nBalance: {}\nCreated: {}",
-            acc.id, acc.name, acc.r#type, acc.currency, fmt_money(acc.opening_balance.0), acc.created_at
-        ))
+        let balance_val = acc.opening_balance.0;
+        let b_color = if balance_val.is_sign_negative() { Color::Red } else { Color::Green };
+
+      
+        let text = vec![
+            Line::from(vec![Span::raw("ID:       "), Span::raw(acc.id.to_string())]),
+            Line::from(vec![Span::raw("Name:     "), Span::styled(&acc.name, Style::default().add_modifier(Modifier::BOLD))]),
+            Line::from(vec![Span::raw("Type:     "), Span::styled(format!("{:?}", acc.r#type), Style::default().fg(Color::Cyan))]),
+            Line::from(vec![Span::raw("Currency: "), Span::raw(&acc.currency)]),
+            Line::from(vec![Span::raw("Balance:  "), Span::styled(fmt_money(balance_val), Style::default().fg(b_color))]),
+            Line::from(""),
+            Line::from(vec![Span::raw("Created:  "), Span::raw(&acc.created_at)]),
+        ];
+        Paragraph::new(text)
     } else {
         Paragraph::new("No account selected")
-    }.block(Block::default().borders(Borders::ALL).title("Details"));
+    }.block(Block::default().borders(Borders::ALL).title(" Details "));
+    
     f.render_widget(right, cols[1]);
 }
 
-fn draw_new_account_modal(f: &mut Frame, area: Rect, app: &mut App) {
-    use crate::cli::state::{AccField, AccountType};
 
+fn draw_new_account_modal(f: &mut Frame, area: Rect, app: &mut App) {
     let form = &app.accounts.form;
 
-    let (m_name, m_type, m_currency, m_opening) = match form.editing {
-        Some(AccField::Name)     => ("  <editing>", "", "", ""),
-        Some(AccField::Type)     => ("", "  <editing> (use  ↑ / ↓)", "", ""),
-        Some(AccField::Currency) => ("", "", "  <editing>", ""),
-        Some(AccField::Opening)  => ("", "", "", "  <editing>"),
-        None                     => ("", "", "", ""),
+    let (help_text, key_hint) = match form.editing {
+        Some(AccField::Name) => (
+            "Enter name of the account", 
+            "[Enter] Next Field    [Esc] Cancel"
+        ),
+        Some(AccField::Type) => (
+            "Use ↑/↓ keys to change Account Type", 
+            "[Enter] Next Field    [Esc] Cancel"
+        ),
+        Some(AccField::Currency) => (
+            "Currency code (e.g. CAD, USD, CNY)", 
+            "[Enter] Next Field    [Esc] Cancel"
+        ),
+        Some(AccField::Opening) => (
+            "Initial Balance (Positive=Asset, Negative=Debt)", 
+            "[Enter] Save/Create   [Esc] Cancel" 
+        ),
+        None => ("", "[Esc] Cancel"),
     };
 
-    let lines = vec![
-        format!("Name     : {}{}", form.name, m_name),
-        format!("Type     : {:?}{}", form.r#type, m_type),
-        format!("Currency : {}{}", form.currency, m_currency),
-        format!("Opening  : {}{}", form.opening, m_opening),
-        "".into(),
-        "TAB: switch field | ↑/↓: change Type | Enter: create | Esc: cancel".into(),
-        form.error.clone().unwrap_or_default(),
-    ].join("\n");
+  
+    let style_line = |target: AccField, label: &str, value: &str| -> Line {
+        if Some(target) == form.editing {
+        
+            Line::from(vec![
+                Span::styled(" > ", Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    format!("{:<9}: {}", label, value), 
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                ),
+            ])
+        } else {
+            
+            Line::from(vec![
+                Span::raw("    "),
+                Span::raw(format!("{:<9}: {}", label, value)),
+            ])
+        }
+    };
 
-    let p = Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title("New Account"));
+    let type_str = if Some(AccField::Type) == form.editing {
+        format!("{:?} (Use ↑/↓)", form.r#type)
+    } else {
+        format!("{:?}", form.r#type)
+    };
+
+
+    let mut lines = vec![
+        Line::from(""), 
+        style_line(AccField::Name, "Name", &form.name),
+        style_line(AccField::Type, "Type", &type_str),
+        style_line(AccField::Currency, "Currency", &form.currency),
+        style_line(AccField::Opening, "Opening", &form.opening),
+        
+        Line::from(""),
+
+        Line::from(Span::styled(" -------------------------------------------------- ", Style::default().add_modifier(Modifier::DIM))),
+    
+        Line::from(Span::styled(format!(" Tip: {}", help_text), Style::default().fg(Color::Cyan))),
+        
+        Line::from(""),
+
+        Line::from(Span::styled(format!(" {}", key_hint), Style::default().add_modifier(Modifier::DIM))),
+    ];
+
+    if let Some(err) = &form.error {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(format!(" Error: {}", err), Style::default().fg(Color::Red))));
+    }
+
+   let p = Paragraph::new(lines)
+        .block(Block::default().borders(Borders::ALL).title(" New Account "))
+        .wrap(Wrap { trim: true }); 
+
     f.render_widget(p, area);
 }
 // Transactions Page
-
 fn draw_txns(f: &mut Frame, area: Rect, app: &mut App) {
-    // Build table rows
-    let header = Row::new(vec!["Date", "Category", "Memo", "Amount"]).height(1);
+    let header = Row::new(vec!["Date", "Category", "Memo", "Amount"])
+        .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)) 
+        .height(1);
 
     let body: Vec<Row> = app.txn.table.iter().map(|t| {
+        let amt_style = if t.amount.0.is_sign_negative() { 
+            Style::default().fg(Color::Red) 
+        } else { 
+            Style::default().fg(Color::Green) 
+        };
+        let cat_str = t.category_id.map(|id| format!("#{}", id)).unwrap_or_else(|| "-".into());
+
         Row::new(vec![
             Cell::from(t.txn_date.to_string()),
-            Cell::from(t.category_id.map(|id| format!("#{id}")).unwrap_or_else(|| "-".into())),
+            Cell::from(cat_str),
             Cell::from(t.memo.clone().unwrap_or_default()),
-            Cell::from(fmt_money(t.amount.0)),
+            Cell::from(Span::styled(fmt_money(t.amount.0), amt_style)),
         ])
     }).collect();
 
     let widths = [
         Constraint::Length(12),
-        Constraint::Length(12),
+        Constraint::Length(10),
         Constraint::Percentage(60),
-        Constraint::Length(14),
+        Constraint::Length(15),
     ];
 
     let mut tsel = app.txn.tsel.clone();
@@ -144,20 +264,16 @@ fn draw_txns(f: &mut Frame, area: Rect, app: &mut App) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(if app.txn.loading { "Transactions (loading…)" } else { "Transactions" }),
+                .title(if app.txn.loading { " Transactions (Loading...) " } else { " Transactions " }),
         )
-        .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+        .highlight_style(Style::default().bg(Color::DarkGray));
 
     f.render_stateful_widget(table, area, &mut tsel);
-    app.txn.tsel = tsel;
+    app.txn.tsel = tsel; 
 }
 
 // Add Transaction Page
-
 fn draw_add_txn(f: &mut Frame, area: Rect, app: &mut App) {
-    use crate::cli::state::EditField;
-    use ratatui::widgets::Wrap; 
-
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
@@ -165,12 +281,10 @@ fn draw_add_txn(f: &mut Frame, area: Rect, app: &mut App) {
 
     let left_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(8),     
-            Constraint::Length(8),  
-        ])
+        .constraints([Constraint::Min(10), Constraint::Length(10)]) 
         .split(cols[0]);
 
+  
     {
         let len = app.add.categories.len();
         let new_sel = match (len, app.add.cat_sel.selected()) {
@@ -180,108 +294,123 @@ fn draw_add_txn(f: &mut Frame, area: Rect, app: &mut App) {
         };
         app.add.cat_sel.select(new_sel);
     }
-    let selected_name = app
-            .add
-            .cat_sel
-            .selected()
-            .and_then(|i| app.add.categories.get(i))
-            .map(|c| format!("{} ({:?}) {}", c.name, c.r#type, c.icon))
-            .unwrap_or_else(|| "<none>".into());
+    
+    let items: Vec<ListItem> = app.add.categories.iter().map(|c| {
+        let style = if c.r#type == state::CategoryType::Income { Style::default().fg(Color::Green) } else { Style::default().fg(Color::Red) };
+        ListItem::new(Line::from(vec![
+            Span::raw(format!("{:<15}", c.name)),
+            Span::styled(format!("{:?}", c.r#type), style),
+            Span::raw(format!("  {}", c.icon))
+        ]))
+    }).collect();
 
-    let (m_date, m_payee, m_memo, m_category, m_amount) = match app.add.editing {
-        Some(EditField::Date)     => ("  <editing>", "", "", "", ""),
-        Some(EditField::Payee)    => ("", "  <editing>", "", "", ""),
-        Some(EditField::Memo)     => ("", "", "  <editing>", "", ""),
-        Some(EditField::Category) => ("", "", "", "  <editing> (↑/↓ to choose)", ""),
-        Some(EditField::Amount)   => ("", "", "", "", "  <editing>"),
-        None                      => ("", "", "", "", ""),
+    let list = List::new(items)
+        .block(Block::default().borders(Borders::ALL).title(" Select Category (↑/↓) "))
+        .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD));
+    f.render_stateful_widget(list, cols[1], &mut app.add.cat_sel);
+
+
+   
+    let get_form_style = |target: EditField| -> (Style, &str) {
+        if Some(target) == app.add.editing {
+            (Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD), " > ")
+        } else {
+            (Style::default(), "   ")
+        }
     };
 
-    // List input
-    let form_lines = vec![
-        format!("Account : {:?}", app.add.account_id),
-        format!("Date    : {}{}",   app.add.date,   m_date),
-        format!("Payee   : {}{}",   app.add.payee,  m_payee),
-        format!("Desc    : {}{}",   app.add.memo,   m_memo), 
-        format!("Category: {}{}",   selected_name,  m_category), 
-        format!(
-            "Amount  : {}{}  [{}]",
-            app.add.amount,
-            m_amount,
-            if app.add.is_expense { "Expense (-)" } else { "Income (+)" }
-        ),
-    ].join("\n");
+    let (s_date, p_date) = get_form_style(EditField::Date);
+    let (s_payee, p_payee) = get_form_style(EditField::Payee);
+    let (s_memo, p_memo) = get_form_style(EditField::Memo);
+    let (s_amt, p_amt) = get_form_style(EditField::Amount);
 
-    let form_p = Paragraph::new(form_lines)
-        .block(Block::default().borders(Borders::ALL).title("Add Transaction"));
-    f.render_widget(form_p, left_chunks[0]); 
+    let selected_cat_name = app.add.cat_sel.selected()
+        .and_then(|i| app.add.categories.get(i))
+        .map(|c| c.name.clone())
+        .unwrap_or_else(|| "None".to_string());
+
+    let form_text = vec![
+        Line::from(""),
+        Line::from(vec![Span::raw("   Account : "), Span::raw(format!("{:?}", app.add.account_id))]), 
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(p_date, s_date), Span::raw("Date    : "), Span::styled(&app.add.date, s_date)
+        ]),
+        Line::from(vec![
+            Span::styled(p_payee, s_payee), Span::raw("Payee   : "), Span::styled(&app.add.payee, s_payee)
+        ]),
+        Line::from(vec![
+            Span::styled(p_memo, s_memo), Span::raw("Memo    : "), Span::styled(&app.add.memo, s_memo)
+        ]),
+        Line::from(vec![
+            Span::styled(p_amt, s_amt), Span::raw("Amount  : "), Span::styled(&app.add.amount, s_amt),
+            Span::raw("  "),
+            if app.add.is_expense { 
+                Span::styled("[Expense -]", Style::default().fg(Color::Red)) 
+            } else { 
+                Span::styled("[Income +]", Style::default().fg(Color::Green)) 
+            }
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::raw("   Category: "), Span::styled(selected_cat_name, Style::default().fg(Color::Cyan))
+        ]),
+    ];
+
+    f.render_widget(
+        Paragraph::new(form_text).block(Block::default().borders(Borders::ALL).title(" Add Transaction ")),
+        left_chunks[0]
+    );
+
 
     let help_lines = vec![
-        "Controls:".into(),
-        "  Tab/Shift+Tab: Switch field".into(),
-        "  Enter: Edit mode (or toggle)".into(),
-        "  p/a/m/d: Quick jump".into(),
-        "Actions:".into(),
-        "  Ctrl+s: Save | Esc: Back | t: Type".into(),
-        String::new(), 
+        Line::from(vec![Span::styled(" Controls: ", Style::default().fg(Color::Yellow))]),
+        Line::from("  TAB: Switch Field | ENTER: Edit Mode"),
+        Line::from("  t: Toggle Income/Expense"),
+        Line::from("  Ctrl+s: Save | ESC: Back"),
+        Line::from(""),
         if let Some(err) = &app.add.error {
-            format!("Error: {}", err)
+            Line::from(Span::styled(format!(" Error: {}", err), Style::default().fg(Color::Red)))
         } else if let Some(succ) = &app.add.success {
-            format!("Success: {}", succ)
+            Line::from(Span::styled(format!(" Success: {}", succ), Style::default().fg(Color::Green)))
         } else {
-            String::new()
+            Line::from("")
         }
-    ].join("\n");
-
-    let help_p = Paragraph::new(help_lines)
-        .block(Block::default().borders(Borders::ALL).title("Help & Status"))
-        .wrap(Wrap { trim: true }); 
-    f.render_widget(help_p, left_chunks[1]); 
-
-    let items: Vec<ListItem> = app
-        .add
-        .categories
-        .iter()
-        .map(|c| ListItem::new(Line::from(format!("{}  {:?}  {}", c.name, c.r#type, c.icon))))
-        .collect();
-    let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title("Categories"))
-        .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
-
-    f.render_stateful_widget(list, cols[1], &mut app.add.cat_sel);
+    ];
+    
+    f.render_widget(
+        Paragraph::new(help_lines).block(Block::default().borders(Borders::ALL).title(" Status ")).wrap(Wrap{ trim: true }),
+        left_chunks[1]
+    );
 }
+
 fn draw_help(f: &mut Frame, area: Rect) {
     let help_text = vec![
         "Global Keys:",
         "  q        : Quit App",
-        "  ?        : Toggle this Help tab",
-        "  Tab      : Switch tabs (Accounts <-> Transactions <-> Add)",
+        "  ?        : Toggle this Help",
+        "  Tab      : Switch Tabs",
         "",
         "Accounts Tab:",
-        "  Up/Down  : Navigate list",
-        "  Enter    : View transactions for selected account",
-        "  n        : Create new account",
-        "  r        : Refresh data",
+        "  n        : Create New Account",
+        "  e        : Edit Selected Account",
+        "  d        : Delete Selected Account",
+        "  Enter    : View Transactions",
+        "  r        : Refresh",
         "",
         "Transactions Tab:",
-        "  Up/Down  : Navigate list",
-        "  a        : Add new transaction",
-        "  x/Del    : Delete selected transaction",
-        "  r        : Refresh list",
+        "  a        : Add Transaction",
+        "  x/Del    : Delete Transaction",
         "  b        : Back to Accounts",
         "",
         "Add Transaction Tab:",
-        "  Tab      : Cycle through fields (Date -> Payee -> ...)",
-        "  Enter    : Enter/Exit Edit Mode (Toggle)",
-        "  Ctrl + s : Save Transaction (Submit)",
-        "  Esc      : Cancel / Back to list",
+        "  Ctrl+s   : Save",
         "  t        : Toggle Expense/Income",
-        "  p/m/a/d  : Quick jump to Payee/Memo/Amount/Date",
-        "  Up/Down  : Select Category (when Category field is active)",
+        "  Enter    : Toggle Edit Mode",
     ].join("\n");
 
     let p = Paragraph::new(help_text)
-        .block(Block::default().borders(Borders::ALL).title("Help & Keybindings"));
+        .block(Block::default().borders(Borders::ALL).title(" Help & Keys ").style(Style::default().fg(Color::Cyan)));
     
     f.render_widget(p, area);
 }
