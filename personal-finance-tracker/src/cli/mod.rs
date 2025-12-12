@@ -21,6 +21,10 @@ pub async fn run() -> Result<()> {
     let db_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "sqlite://./finance_tracker.db".to_string());
 
+    let tmp_pool = sqlx::SqlitePool::connect(&db_url).await?;
+    crate::database::db::queries::seed_fixed_categories(&tmp_pool).await?;
+    tmp_pool.close().await;
+    
     let client = api::Client::sqlite(&db_url).await?;
     let mut app = state::App::new(client);
 
@@ -44,9 +48,9 @@ pub async fn run() -> Result<()> {
 
         if event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
-                //if key.code == KeyCode::Char('q') {
-                //    break;
-                //}
+                if key.code == KeyCode::Char('q') {
+                    break;
+                }
                 app.handle_key(key).await?;
             }
         }
