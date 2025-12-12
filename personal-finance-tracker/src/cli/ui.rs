@@ -259,9 +259,9 @@ fn draw_txns(f: &mut Frame, area: Rect, app: &mut App) {
     }).collect();
 
     let widths = [
-        Constraint::Length(12),
-        Constraint::Length(10),
-        Constraint::Percentage(60),
+        Constraint::Length(15),
+        Constraint::Length(20),
+        Constraint::Percentage(50),
         Constraint::Length(15),
     ];
 
