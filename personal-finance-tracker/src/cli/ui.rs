@@ -46,7 +46,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         state::Tab::Help => draw_help(f, root[1]),
     }
 
-    let status_text = format!(" Status: {} ", app.status);
+    let status_text = match app.tab {
+        state::Tab::AddTxn => "",
+        _ => " Press ? for help | q to quit ", 
+    };
+    
     let status = Paragraph::new(status_text)
         .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
     f.render_widget(status, root[2]);
@@ -241,7 +245,10 @@ fn draw_txns(f: &mut Frame, area: Rect, app: &mut App) {
         } else { 
             Style::default().fg(Color::Green) 
         };
-        let cat_str = t.category_id.map(|id| format!("#{}", id)).unwrap_or_else(|| "-".into());
+       let cat_str = t.category_id
+            .and_then(|id| app.add.categories.iter().find(|c| c.id == id)) 
+            .map(|c| format!("{} {}", c.icon, c.name)) 
+            .unwrap_or_else(|| t.category_id.map(|id| format!("#{}", id)).unwrap_or("-".into())); 
 
         Row::new(vec![
             Cell::from(t.txn_date.to_string()),
@@ -264,7 +271,7 @@ fn draw_txns(f: &mut Frame, area: Rect, app: &mut App) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(if app.txn.loading { " Transactions (Loading...) " } else { " Transactions " }),
+                .title(if app.txn.loading { " Transactions (Loading...) " } else { " Transactions (a:Add e:Edit d:Del Esc:Back) " }),
         )
         .highlight_style(Style::default().bg(Color::DarkGray));
 
@@ -329,12 +336,27 @@ fn draw_add_txn(f: &mut Frame, area: Rect, app: &mut App) {
         .map(|c| c.name.clone())
         .unwrap_or_else(|| "None".to_string());
 
+    let account_name = app.accounts.list.iter()
+        .find(|a| Some(a.id) == app.add.account_id) 
+        .map(|a| format!("{} ({})", a.name, a.currency)) 
+        .unwrap_or_else(|| "No Account Selected".to_string()); 
+
+    let title_str = if app.add.editing_txn_id.is_some() {
+            " Edit Txn (Tab:Next 't':Type Ctrl+s:Save Esc:Cancel) "
+        } else {
+            " Add Txn (Tab:Next 't':Type Ctrl+s:Save Esc:Cancel) "
+        };
+        
     let form_text = vec![
         Line::from(""),
-        Line::from(vec![Span::raw("   Account : "), Span::raw(format!("{:?}", app.add.account_id))]), 
+        Line::from(vec![
+                Span::raw("   Account : "), 
+                Span::styled(account_name, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            ]), 
+        Line::from(""),
         Line::from(""),
         Line::from(vec![
-            Span::styled(p_date, s_date), Span::raw("Date    : "), Span::styled(&app.add.date, s_date)
+            Span::styled(p_date, s_date), Span::raw("Date    : "), Span::styled(&app.add.date, s_date) 
         ]),
         Line::from(vec![
             Span::styled(p_payee, s_payee), Span::raw("Payee   : "), Span::styled(&app.add.payee, s_payee)
@@ -357,8 +379,12 @@ fn draw_add_txn(f: &mut Frame, area: Rect, app: &mut App) {
         ]),
     ];
 
-    f.render_widget(
-        Paragraph::new(form_text).block(Block::default().borders(Borders::ALL).title(" Add Transaction ")),
+   f.render_widget(
+        Paragraph::new(form_text).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(title_str) 
+        ),
         left_chunks[0]
     );
 
@@ -401,7 +427,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
         "Transactions Tab:",
         "  a        : Add Transaction",
         "  x/Del    : Delete Transaction",
-        "  b        : Back to Accounts",
+        "  Esc      : Back to Accounts", 
         "",
         "Add Transaction Tab:",
         "  Ctrl+s   : Save",
