@@ -10,6 +10,8 @@ use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, Key
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::{backend::CrosstermBackend, Terminal};
 
+use crate::database::db::{migrate, queries};
+
 pub mod api;
 pub mod state;
 pub mod input;
@@ -18,19 +20,17 @@ pub mod ui;
 
 
 pub async fn run() -> Result<()> {
-    let db_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "sqlite://./finance_tracker.db".to_string());
+    /* -----Initialization-----*/ 
+    let mut app = init_app().await?;
 
-    let client = api::Client::sqlite(&db_url).await?;
-    let mut app = state::App::new(client);
-
+    /* ------UI SETUP------ */
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     crossterm::execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    app.refresh_accounts().await.ok();
+    app.refresh_accounts().await?;
 
     let tick_rate = Duration::from_millis(200);
     let mut last_tick = Instant::now();
@@ -65,4 +65,26 @@ pub async fn run() -> Result<()> {
     crossterm::execute!(stdout, LeaveAlternateScreen, DisableMouseCapture)?;
     terminal.show_cursor()?;
     Ok(())
+}
+
+pub async fn init_app() -> Result<state::App> {
+    // Load database URL
+    let db_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "sqlite://./finance_tracker.db".to_string());
+
+    // Create DB client
+    let client = api::Client::sqlite(&db_url).await?;
+    let pool = client.pool();
+
+    // println!(">>> Running SQL migrations...");
+    // Run migrations
+    migrate::run_migrations(pool).await?;
+
+    // Seed categories
+    queries::seed_fixed_categories(pool).await?;
+
+    // Create app state
+    let app = state::App::new(client);
+
+    Ok(app)
 }

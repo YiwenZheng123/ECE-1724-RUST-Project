@@ -4,7 +4,7 @@ use std::str::FromStr;
 use sqlx::Row;
 use chrono::NaiveDateTime;
 use crate::database::models::{
-        Account, Category, Transaction, Tag, RecurringTransaction, Budget, SavingsGoal, CurrencyRate};
+        Account, Category, Transaction, Tag, RecurringTransaction, Budget, SavingsGoal};
 
 /*
 This file contains the specific SQL query, 
@@ -116,7 +116,7 @@ pub async fn delete_account(pool: &Pool<Sqlite>, account_id: i64) -> Result<bool
     let mut tx = pool.begin().await?;
 
     // First need to delete all transaction records associated with the account
-    let trans_result = sqlx::query!(
+    sqlx::query!(
         r#"
         DELETE FROM transactions
         WHERE account_id = ?
