@@ -15,11 +15,11 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     // top tabs | main content | Bottom status bar
     let root = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(10), Constraint::Length(1)])
+        .constraints([Constraint::Length(3), Constraint::Min(10)])
         .split(size);
 
     // Tabs
-    let titles = ["Accounts", "Transactions", "AddTxn", "Help"]
+    let titles = ["Accounts", "Transactions", "AddTransaction", "Help"]
         .into_iter()
         .map(|t| Line::from(Span::raw(t)))
         .collect::<Vec<_>>();
@@ -35,10 +35,6 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         state::Tab::AddTxn => draw_add_txn(f, root[1], app),
         state::Tab::Help => draw_help(f, root[1]),
     }
-
-    let status = Paragraph::new(app.status.clone())
-        .block(Block::default().borders(Borders::ALL).title("Status"));
-    f.render_widget(status, root[2]);
 
     if app.accounts.creating {
         let area = center_rect(root[1], 54, 12);
@@ -160,10 +156,20 @@ fn draw_txns(f: &mut Frame, area: Rect, app: &mut App) {
 
 fn draw_add_txn(f: &mut Frame, area: Rect, app: &mut App) {
     use crate::cli::state::EditField;
+    use ratatui::widgets::Wrap; 
+
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
         .split(area);
+
+    let left_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(8),     
+            Constraint::Length(8),  
+        ])
+        .split(cols[0]);
 
     {
         let len = app.add.categories.len();
@@ -182,7 +188,6 @@ fn draw_add_txn(f: &mut Frame, area: Rect, app: &mut App) {
             .map(|c| format!("{} ({:?}) {}", c.name, c.r#type, c.icon))
             .unwrap_or_else(|| "<none>".into());
 
-
     let (m_date, m_payee, m_memo, m_category, m_amount) = match app.add.editing {
         Some(EditField::Date)     => ("  <editing>", "", "", "", ""),
         Some(EditField::Payee)    => ("", "  <editing>", "", "", ""),
@@ -192,12 +197,12 @@ fn draw_add_txn(f: &mut Frame, area: Rect, app: &mut App) {
         None                      => ("", "", "", "", ""),
     };
 
-
-    let left_lines = vec![
+    // List input
+    let form_lines = vec![
         format!("Account : {:?}", app.add.account_id),
         format!("Date    : {}{}",   app.add.date,   m_date),
         format!("Payee   : {}{}",   app.add.payee,  m_payee),
-        format!("Memo    : {}{}",   app.add.memo,   m_memo),
+        format!("Desc    : {}{}",   app.add.memo,   m_memo), 
         format!("Category: {}{}",   selected_name,  m_category), 
         format!(
             "Amount  : {}{}  [{}]",
@@ -205,15 +210,33 @@ fn draw_add_txn(f: &mut Frame, area: Rect, app: &mut App) {
             m_amount,
             if app.add.is_expense { "Expense (-)" } else { "Income (+)" }
         ),
-        String::new(),
-        "Edit: p=Payee, a=Amount, m=Memo, d=Date, c=Category; Tab switch field".into(),
-        "Actions: s=Save, b/Esc=Back, t=Toggle income/expense".into(),
-        app.add.error.clone().unwrap_or_default(),
-        app.add.success.clone().unwrap_or_default(),
     ].join("\n");
-    let left = Paragraph::new(left_lines)
+
+    let form_p = Paragraph::new(form_lines)
         .block(Block::default().borders(Borders::ALL).title("Add Transaction"));
-    f.render_widget(left, cols[0]);
+    f.render_widget(form_p, left_chunks[0]); 
+
+    let help_lines = vec![
+        "Controls:".into(),
+        "  Tab/Shift+Tab: Switch field".into(),
+        "  Enter: Edit mode (or toggle)".into(),
+        "  p/a/m/d: Quick jump".into(),
+        "Actions:".into(),
+        "  Ctrl+s: Save | Esc: Back | t: Type".into(),
+        String::new(), 
+        if let Some(err) = &app.add.error {
+            format!("Error: {}", err)
+        } else if let Some(succ) = &app.add.success {
+            format!("Success: {}", succ)
+        } else {
+            String::new()
+        }
+    ].join("\n");
+
+    let help_p = Paragraph::new(help_lines)
+        .block(Block::default().borders(Borders::ALL).title("Help & Status"))
+        .wrap(Wrap { trim: true }); 
+    f.render_widget(help_p, left_chunks[1]); 
 
     let items: Vec<ListItem> = app
         .add
@@ -227,17 +250,39 @@ fn draw_add_txn(f: &mut Frame, area: Rect, app: &mut App) {
 
     f.render_stateful_widget(list, cols[1], &mut app.add.cat_sel);
 }
-
 fn draw_help(f: &mut Frame, area: Rect) {
-    let help = r#"Keys
-        Global:    q Quit, ? Help
-        Accounts:  Up/Down Move, Enter → Transactions, n New, r Refresh
-        Txns:      a Add, r Refresh, b Back
-        AddTxn:    p/a/m/d start editing Payee/Amount/Memo/Date 
-                   Editing: Enter Save, Esc Cancel, Up/Down Choose Category,
-                   t Switch income/expenditure, s Save, b/Esc Back
-        "#;
-    let p = Paragraph::new(help).block(Block::default().borders(Borders::ALL).title("Help"));
+    let help_text = vec![
+        "Global Keys:",
+        "  q        : Quit App",
+        "  ?        : Toggle this Help tab",
+        "  Tab      : Switch tabs (Accounts <-> Transactions <-> Add)",
+        "",
+        "Accounts Tab:",
+        "  Up/Down  : Navigate list",
+        "  Enter    : View transactions for selected account",
+        "  n        : Create new account",
+        "  r        : Refresh data",
+        "",
+        "Transactions Tab:",
+        "  Up/Down  : Navigate list",
+        "  a        : Add new transaction",
+        "  x/Del    : Delete selected transaction",
+        "  r        : Refresh list",
+        "  b        : Back to Accounts",
+        "",
+        "Add Transaction Tab:",
+        "  Tab      : Cycle through fields (Date -> Payee -> ...)",
+        "  Enter    : Enter/Exit Edit Mode (Toggle)",
+        "  Ctrl + s : Save Transaction (Submit)",
+        "  Esc      : Cancel / Back to list",
+        "  t        : Toggle Expense/Income",
+        "  p/m/a/d  : Quick jump to Payee/Memo/Amount/Date",
+        "  Up/Down  : Select Category (when Category field is active)",
+    ].join("\n");
+
+    let p = Paragraph::new(help_text)
+        .block(Block::default().borders(Borders::ALL).title("Help & Keybindings"));
+    
     f.render_widget(p, area);
 }
 
