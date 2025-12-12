@@ -70,6 +70,7 @@ pub struct TransactionDto {
     pub category_id: Option<i64>,
     pub amount: Money, 
     pub memo: Option<String>,
+    pub payee: Option<String>,      //added payee
     pub currency: String,
     pub txn_date: NaiveDate,
     pub cleared: bool,
@@ -91,7 +92,8 @@ pub struct CreateTxnReq {
     pub amount: Money, 
     pub base_amount: Money,  
     pub is_expense: bool,    
-    pub description: Option<String>,   
+    pub description: Option<String>,  
+    pub payee: Option<String>,      //added payee
     pub currency: String,
     pub transacted_at: NaiveDateTime,
 }
@@ -587,6 +589,7 @@ impl App {
                         self.add.editing_txn_id = Some(txn.id); 
                         self.add.date = txn.txn_date.format("%Y-%m-%d").to_string();
                         self.add.memo = txn.memo.unwrap_or_default();
+                        self.add.payee = txn.payee.unwrap_or_default();
                         self.add.amount = txn.amount.0.abs().to_string(); 
                         self.add.is_expense = txn.amount.0.is_sign_negative();
                         
@@ -799,6 +802,11 @@ impl App {
                 None 
             } else { 
                 Some(self.add.memo.trim().to_string()) 
+            },
+            payee: if self.add.payee.trim().is_empty() { 
+                None 
+            } else { 
+                Some(self.add.payee.trim().to_string()) 
             },
             currency: self.current_account()
                 .map(|a| a.currency.clone())
