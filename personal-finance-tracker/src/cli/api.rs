@@ -366,6 +366,37 @@ impl Client {
         })
     }
 
+    pub async fn update_transaction(&self, id: i64, req: &CreateTxnReq) -> Result<()> {
+        let is_expense = if req.amount.0.is_sign_negative() { 1 } else { 0 };
+        let amount_abs = req.amount.0.abs().to_string();
+
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query!(
+            r#"
+            UPDATE transactions 
+            SET category_id = ?, amount = ?, base_amount = ?, is_expense = ?, 
+                description = ?, currency = ?, transacted_at = ?
+            WHERE transaction_id = ?
+            "#,
+            req.category_id,
+            amount_abs, 
+            amount_abs, 
+            is_expense,
+            req.description,
+            req.currency,
+            req.transacted_at,
+            id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        self.recompute_balance_exec(&mut *tx, req.account_id).await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
 
     pub async fn delete_transaction(&self, transaction_id: i64) -> anyhow::Result<()> {
         let (account_id,): (i64,) = sqlx::query_as(
