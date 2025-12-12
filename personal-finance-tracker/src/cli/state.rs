@@ -236,10 +236,8 @@ impl App {
         }
 
     pub async fn load_categories(&mut self) {
-        if self.add.categories.is_empty() {
-            if let Ok(list) = self.api.list_categories().await {
-                self.add.categories = list;
-            }
+        if let Ok(list) = self.api.list_categories().await {
+            self.add.categories = list;
         }
     }
 
@@ -493,6 +491,7 @@ impl App {
                 self.add.cat_sel.select(None);
                 self.add.just_entered = true;
                 self.load_categories().await;
+                self.ensure_cat_selected();
             }
             KeyCode::Char('r') => {
                 self.refresh_txns().await.ok();
