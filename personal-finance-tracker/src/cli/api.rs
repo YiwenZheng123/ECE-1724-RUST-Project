@@ -234,8 +234,8 @@ impl Client {
         let row = sqlx::query(
             r#"
             INSERT INTO transactions
-              (account_id, category_id, amount, base_amount, is_expense, description, currency, transacted_at, trans_create_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?,  strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+              (account_id, category_id, amount, is_expense, description, currency, transacted_at, trans_create_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
             RETURNING
               transaction_id AS id,
               account_id     AS account_id,
@@ -249,12 +249,11 @@ impl Client {
         )
         .bind(req.account_id)
         .bind(req.category_id)
-        .bind(&amount_abs)
-        .bind(&amount_abs)
+        .bind(amount_abs)
         .bind(is_expense)
-        .bind(req.description.as_deref()) 
+        .bind(req.memo.as_deref()) 
         .bind(&req.currency)
-        .bind(req.transacted_at.format("%Y-%m-%d %H:%M:%S").to_string())
+        .bind(req.txn_date.format("%Y-%m-%d").to_string())
         .fetch_one(&self.pool)
         .await?;
 
