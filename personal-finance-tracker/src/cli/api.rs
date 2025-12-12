@@ -271,6 +271,7 @@ impl Client {
               t.amount         AS amount,
               t.is_expense     AS is_expense,
               t.description    AS memo,
+              t.payee          AS payee,
               t.currency       AS currency,
               t.transacted_at  AS txn_date
             FROM transactions t
@@ -294,6 +295,7 @@ impl Client {
             let amount_s: String = r.try_get("amount")?;
             let is_expense_i: i64 = r.try_get("is_expense")?;
             let memo: Option<String> = r.try_get("memo")?;
+            let payee: Option<String> = r.try_get("payee")?;
             let currency: Option<String> = r.try_get("currency")?;
             let txn_date_s: String = r.try_get("txn_date")?;
 
@@ -306,6 +308,7 @@ impl Client {
                 category_id: cat,
                 amount: Money(amt),
                 memo,
+                payee,
                 currency: currency.unwrap_or_else(|| "CAD".into()),
                 txn_date: parse_date_any(&txn_date_s),
                 cleared: false,
@@ -322,8 +325,8 @@ impl Client {
         let row = sqlx::query(
             r#"
             INSERT INTO transactions
-              (account_id, category_id, amount, base_amount, is_expense, description, currency, transacted_at, trans_create_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?,  strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+              (account_id, category_id, amount, base_amount, is_expense, description, payee, currency, transacted_at, trans_create_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,  strftime('%Y-%m-%dT%H:%M:%SZ','now'))
             RETURNING
               transaction_id AS id,
               account_id     AS account_id,
@@ -331,6 +334,7 @@ impl Client {
               amount         AS amount,
               is_expense     AS is_expense,
               description    AS memo,
+              payee          AS payee,
               currency       AS currency,
               transacted_at  AS txn_date
             "#,
@@ -341,6 +345,7 @@ impl Client {
         .bind(&amount_abs)
         .bind(is_expense)
         .bind(req.description.as_deref()) 
+        .bind(req.payee.as_deref()) 
         .bind(&req.currency)
         .bind(req.transacted_at.format("%Y-%m-%d %H:%M:%S").to_string())
         .fetch_one(&self.pool)
@@ -359,6 +364,7 @@ impl Client {
             category_id: row.try_get("category_id")?,
             amount: Money(amt),
             memo: row.try_get("memo")?,
+            payee: row.try_get("payee")?,
             currency: row.try_get::<Option<String>, _>("currency")?.unwrap_or_else(|| "CAD".into()),
             txn_date: parse_date_any(&row.try_get::<String, _>("txn_date")?),
             cleared: false,
@@ -376,7 +382,7 @@ impl Client {
             r#"
             UPDATE transactions 
             SET category_id = ?, amount = ?, base_amount = ?, is_expense = ?, 
-                description = ?, currency = ?, transacted_at = ?
+                description = ?, payee = ?, currency = ?, transacted_at = ?
             WHERE transaction_id = ?
             "#,
             req.category_id,
@@ -384,6 +390,7 @@ impl Client {
             amount_abs, 
             is_expense,
             req.description,
+            req.payee,
             req.currency,
             req.transacted_at,
             id
