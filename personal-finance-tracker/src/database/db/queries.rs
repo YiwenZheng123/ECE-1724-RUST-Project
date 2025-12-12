@@ -613,3 +613,32 @@ pub async fn net_savings(pool: &Pool<Sqlite>) -> Result<f64, sqlx::Error> {
     
     Ok(row.net.unwrap_or(0.0))
 }
+pub async fn seed_fixed_categories(pool: &Pool<Sqlite>) -> Result<(), sqlx::Error> {
+    let categories = vec![
+        (1, "Salary", "Income"),
+        (2, "Bonus", "Income"),
+        (3, "Investment", "Income"),
+        (4, "Food", "Expense"),
+        (5, "Transport", "Expense"),
+        (6, "Rent", "Expense"),
+        (7, "Shopping", "Expense"),
+        (8, "Utilities", "Expense"),
+        (9, "Entertainment", "Expense"),
+        (10, "Health", "Expense"),
+        (11, "Education", "Expense"),
+        (12, "Travel", "Expense"),
+    ];
+
+    for (id, name, cat_type) in categories {
+        sqlx::query!(
+            r#"
+            INSERT OR REPLACE INTO categories (category_id, category_name, category_type, icon)
+            VALUES (?, ?, ?, '')
+            "#,
+            id, name, cat_type
+        )
+        .execute(pool)
+        .await?;
+    }
+    Ok(())
+}
