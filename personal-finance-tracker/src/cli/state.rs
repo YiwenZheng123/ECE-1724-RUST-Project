@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveDateTime};
 use ratatui::widgets::{ListState, TableState};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -49,7 +49,7 @@ pub struct AccountDto {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CategoryType {
     Income,
     Expense,
@@ -87,11 +87,13 @@ pub struct CreateAccountReq {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateTxnReq {
     pub account_id: i64,
-    pub category_id: Option<i64>,
+    pub category_id: i64,   
     pub amount: Money, 
-    pub memo: Option<String>,
+    pub base_amount: Money,  
+    pub is_expense: bool,    
+    pub description: Option<String>,   
     pub currency: String,
-    pub txn_date: NaiveDate, 
+    pub transacted_at: NaiveDateTime,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -126,6 +128,8 @@ pub struct AccountsPage {
     pub sel: ListState,
     pub creating: bool,
     pub form: AccountForm,
+    pub editing_id: Option<i64>,   
+    pub show_delete_confirm: bool,
 }
 
 // Transactions 
@@ -234,10 +238,8 @@ impl App {
         }
 
     pub async fn load_categories(&mut self) {
-        if self.add.categories.is_empty() {
-            if let Ok(list) = self.api.list_categories().await {
-                self.add.categories = list;
-            }
+        if let Ok(list) = self.api.list_categories().await {
+            self.add.categories = list;
         }
     }
 
@@ -348,73 +350,139 @@ impl App {
         if k.kind != KeyEventKind::Press {
             return Ok(());
         }
+
+        let is_typing = (self.tab == Tab::AddTxn && self.add.editing.is_some()) 
+             || (self.tab == Tab::Accounts && self.accounts.creating);
+
+        // Pressing q to exit is only allowed when it is not in typing mode
+        if !is_typing {
+            match k.code {
+                KeyCode::Char('q') => {
+                    self.quit = true;
+                    return Ok(());
+                }
+                _ => {}
+            }
+        }
         match self.tab {
-            Tab::Accounts => {
-                // Editing mode
-                if self.accounts.creating {
-                    use crossterm::event::KeyCode;
-                    use crate::cli::state::{AccField, AccountType};
-                    match k.code {
-                        KeyCode::Char(c) => {
-                            if let Some(f) = self.accounts.form.editing {
-                                match f {
-                                    AccField::Name     => self.accounts.form.name.push(c),
-                                    AccField::Currency => self.accounts.form.currency.push(c),
-                                    AccField::Opening  => self.accounts.form.opening.push(c),
-                                    AccField::Type     => {} // Type uses c/↑/↓ to cycle
+           Tab::Accounts => {
+            if self.accounts.show_delete_confirm {
+                match k.code {
+                    KeyCode::Char('y') | KeyCode::Enter => {
+                        if let Some(idx) = self.accounts.sel.selected() {
+                            if let Some(acc) = self.accounts.list.get(idx) {
+                                if let Err(e) = self.api.delete_account(acc.id).await {
+                                    self.status = format!("Delete failed: {}", e);
+                                } else {
+                                    self.status = "Account deleted.".to_string();
+                                    self.refresh_accounts().await.ok();
+                                    let len = self.accounts.list.len(); 
+                                    if len > 0 {
+                                        self.accounts.sel.select(Some(len - 1));
+                                    } else {
+                                        self.accounts.sel.select(None);
+                                    }
                                 }
                             }
                         }
-                        KeyCode::Backspace => {
-                            if let Some(f) = self.accounts.form.editing {
-                                match f {
-                                    AccField::Name     => { self.accounts.form.name.pop(); }
-                                    AccField::Currency => { self.accounts.form.currency.pop(); }
-                                    AccField::Opening  => { self.accounts.form.opening.pop(); }
-                                    AccField::Type     => {}
+                        self.accounts.show_delete_confirm = false;
+                    }
+                    KeyCode::Char('n') | KeyCode::Esc => {
+                        self.accounts.show_delete_confirm = false;
+                        self.status = "Delete cancelled.".to_string();
+                    }
+                    _ => {}
+                }
+                return Ok(());
+            }
+
+            
+            if self.accounts.creating {
+                use crossterm::event::KeyCode;
+                use crate::cli::state::{AccField, AccountType};
+                match k.code {
+                    KeyCode::Char(c) => {
+                        if let Some(f) = self.accounts.form.editing {
+                            match f {
+                                AccField::Name     => self.accounts.form.name.push(c),
+                                AccField::Currency => self.accounts.form.currency.push(c),
+                                AccField::Opening  => {
+                                    if self.accounts.editing_id.is_none() {
+                                        self.accounts.form.opening.push(c)
+                                    }
+                                },
+                                AccField::Type     => {} 
+                            }
+                        }
+                    }
+                    KeyCode::Backspace => {
+                        if let Some(f) = self.accounts.form.editing {
+                            match f {
+                                AccField::Name     => { self.accounts.form.name.pop(); }
+                                AccField::Currency => { self.accounts.form.currency.pop(); }
+                                AccField::Opening  => { 
+                                    if self.accounts.editing_id.is_none() {
+                                        self.accounts.form.opening.pop(); 
+                                    }
                                 }
+                                AccField::Type     => {}
                             }
                         }
-                        KeyCode::Tab => {
-                            let cur = self.accounts.form.editing.unwrap_or(AccField::Name);
-                            self.accounts.form.editing = Some(self.acc_next_field(cur));
+                    }
+                    KeyCode::Tab => {
+                        let cur = self.accounts.form.editing.unwrap_or(AccField::Name);
+                        self.accounts.form.editing = Some(self.acc_next_field(cur));
+                    }
+                    KeyCode::Up => {
+                    if matches!(self.accounts.form.editing, Some(AccField::Type)) {
+                        self.accounts.form.r#type = self.cycle_account_type(self.accounts.form.r#type, true);
+                    }
+                    }
+                    KeyCode::Down => {
+                        if matches!(self.accounts.form.editing, Some(AccField::Type)) {
+                            self.accounts.form.r#type = self.cycle_account_type(self.accounts.form.r#type, false);
                         }
-                        KeyCode::Up => {
-                           if matches!(self.accounts.form.editing, Some(AccField::Type)) {
-                                self.accounts.form.r#type = self.cycle_account_type(self.accounts.form.r#type, true);
+                    }
+                    KeyCode::Esc => {
+                        self.accounts.creating = false;
+                        self.accounts.editing_id = None; 
+                        self.accounts.form.error = None;
+                        self.accounts.form.editing = None;
+                    }
+                    KeyCode::Enter => {
+                        let name = self.accounts.form.name.trim();
+                        if name.is_empty() {
+                            self.accounts.form.error = Some("Name cannot be empty".into());
+                            return Ok(());
+                        }
+
+                        if let Some(edit_id) = self.accounts.editing_id {
+                            match self.api.update_account(
+                                edit_id, 
+                                name, 
+                                self.accounts.form.r#type.as_str(), 
+                                &self.accounts.form.currency
+                            ).await {
+                                Ok(_) => {
+                                    self.status = "Account updated.".to_string();
+                                    self.accounts.creating = false;
+                                    self.accounts.editing_id = None;
+                                    self.refresh_accounts().await.ok();
+                                }
+                                Err(e) => self.accounts.form.error = Some(e.to_string()),
                             }
-                        }
-                        KeyCode::Down => {
-                            if matches!(self.accounts.form.editing, Some(AccField::Type)) {
-                                self.accounts.form.r#type = self.cycle_account_type(self.accounts.form.r#type, false);
-                            }
-                        }
-                        KeyCode::Esc => {
-                            self.accounts.creating = false;
-                            self.accounts.form.error = None;
-                            self.accounts.form.editing = None;
-                        }
-                        KeyCode::Enter => {
-                            let name = self.accounts.form.name.trim();
-                            if name.is_empty() {
-                                self.accounts.form.error = Some("Name cannot be empty".into());
-                                return Ok(());
-                            }
+                        } else {
                             let opening = match Decimal::from_str_exact(self.accounts.form.opening.trim()) {
                                 Ok(d) => d,
                                 Err(_) => {
-                                    self.accounts.form.error = Some("Opening must be a valid number".into());
+                                    self.accounts.form.error = Some("Invalid opening balance".into());
                                     return Ok(());
                                 }
                             };
                             let req = CreateAccountReq {
                                 name: name.to_string(),
                                 r#type: self.accounts.form.r#type,
-                                currency: if self.accounts.form.currency.trim().is_empty() {
-                                    "CAD".into()
-                                } else {
-                                    self.accounts.form.currency.trim().to_uppercase()
-                                },
+                                currency: if self.accounts.form.currency.trim().is_empty() { "CAD".into() } else { self.accounts.form.currency.trim().to_uppercase() },
                                 opening_balance: Money(opening),
                             };
                             match self.api.create_account(&req).await {
@@ -423,49 +491,72 @@ impl App {
                                     self.accounts.form.editing = None;
                                     self.refresh_accounts().await.ok();
                                     if !self.accounts.list.is_empty() {
-                                        self.accounts
-                                            .sel
-                                            .select(Some(self.accounts.list.len().saturating_sub(1)));
+                                        self.accounts.sel.select(Some(self.accounts.list.len().saturating_sub(1)));
                                     }
                                     self.status = "Account created.".into();
                                 }
                                 Err(e) => {
+                                    eprintln!(">>> DB Error: {:?}", e);
                                     self.accounts.form.error = Some(format!("Create failed: {e}"));
                                 }
                             }
                         }
-                        _ => {}
                     }
-                    return Ok(()); 
-                }
-
-                // Normal Accounts 
-                match k.code {
-                    KeyCode::Up => self.move_account(-1),
-                    KeyCode::Down => self.move_account(1),
-                    KeyCode::Enter => {
-                        self.tab = Tab::Transactions;
-                        self.txn.account_id = self.current_account_id();
-                        self.refresh_txns().await.ok();
-                    }
-                    KeyCode::Char('n') => {
-                        self.tab = Tab::Accounts;
-                        self.accounts.creating = true;
-                        self.accounts.form = AccountForm {
-                            name: String::new(),
-                            currency: "CAD".into(),
-                            opening: "0".into(),
-                            r#type: AccountType::Cash,
-                            error: None,
-                            editing: Some(AccField::Name),
-                        };
-                    }
-                    KeyCode::Char('r') => { self.refresh_accounts().await.ok(); }
-                    KeyCode::Char('?') => { self.tab = Tab::Help; }
-                    KeyCode::Esc => { /* no-op in normal mode */ }
                     _ => {}
                 }
+                return Ok(()); 
             }
+
+            match k.code {
+                KeyCode::Up => self.move_account(-1),
+                KeyCode::Down => self.move_account(1),
+                KeyCode::Enter => {
+                    self.tab = Tab::Transactions;
+                    self.txn.account_id = self.current_account_id();
+                    self.refresh_txns().await.ok();
+                }
+                KeyCode::Char('n') => {
+                    self.accounts.creating = true;
+                    self.accounts.editing_id = None; 
+                    self.accounts.form = AccountForm {
+                        name: String::new(),
+                        currency: "CAD".into(),
+                        opening: "0".into(),
+                        r#type: AccountType::Cash,
+                        error: None,
+                        editing: Some(AccField::Name),
+                    };
+                }
+                
+                KeyCode::Char('e') => {
+                    if let Some(idx) = self.accounts.sel.selected() {
+                        if let Some(acc) = self.accounts.list.get(idx) {
+                            self.accounts.creating = true;
+                            self.accounts.editing_id = Some(acc.id);
+                        
+                            self.accounts.form = AccountForm {
+                                name: acc.name.clone(),
+                                currency: acc.currency.clone(),
+                                opening: acc.opening_balance.0.to_string(),
+                                r#type: acc.r#type,
+                                error: None,
+                                editing: Some(AccField::Name),
+                            };
+                        }
+                    }
+                }
+              
+                KeyCode::Char('d') | KeyCode::Delete => {
+                    if self.accounts.sel.selected().is_some() {
+                        self.accounts.show_delete_confirm = true;
+                    }
+                }
+                KeyCode::Char('r') => { self.refresh_accounts().await.ok(); }
+                KeyCode::Char('?') => { self.tab = Tab::Help; }
+                KeyCode::Esc => { /* no-op */ }
+                _ => {}
+            }
+        }
         Tab::Transactions => match k.code {
             KeyCode::Up   => self.move_txn(-1),
             KeyCode::Down => self.move_txn(1),
@@ -473,11 +564,11 @@ impl App {
                 use crate::cli::state::EditField;
                 self.tab = Tab::AddTxn;
                 self.add.account_id = self.current_account_id();
-                self.add.editing = Some(EditField::Date);
+                self.add.editing = None;
                 self.add.cat_sel.select(None);
                 self.add.just_entered = true;
                 self.load_categories().await;
-                self.ensure_cat_selected(); 
+                self.ensure_cat_selected();
             }
             KeyCode::Char('r') => {
                 self.refresh_txns().await.ok();
@@ -489,6 +580,7 @@ impl App {
                     } else {
                         let old_idx = self.txn.tsel.selected().unwrap_or(0);
                         self.refresh_txns().await.ok();
+                        self.refresh_accounts().await.ok();
                         let n = self.txn.table.len();
                         if n == 0 {
                             self.txn.tsel.select(None);
@@ -509,18 +601,25 @@ impl App {
         Tab::AddTxn => {
             if k.kind != KeyEventKind::Press { return Ok(()); }
             use crate::cli::state::EditField;
-            if let Some(field) = self.add.editing {
-                match k.code {
-                    KeyCode::Char(c) => {
+            match k.code {
+                KeyCode::Char(c) => {
+                    if k.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) && c == 's' {
+                        self.submit_txn().await.ok();
+                        return Ok(());
+                    }
+
+                    if let Some(field) = self.add.editing {
                         match field {
                             EditField::Payee  => self.add.payee.push(c),
                             EditField::Memo   => self.add.memo.push(c),
                             EditField::Amount => self.add.amount.push(c),
                             EditField::Date   => self.add.date.push(c),
-                            EditField::Category => {}
+                            EditField::Category => {} 
                         }
                     }
-                    KeyCode::Backspace => {
+                }
+                KeyCode::Backspace => {
+                    if let Some(field) = self.add.editing {
                         let target: Option<&mut String> = match field {
                             EditField::Date     => Some(&mut self.add.date),
                             EditField::Payee    => Some(&mut self.add.payee),
@@ -532,81 +631,66 @@ impl App {
                             s.pop();
                         }
                     }
-                    KeyCode::Up if matches!(field, EditField::Category) => {
+                }
 
+                KeyCode::Enter => {
+                    match self.add.editing {
+                        // If you are not currently editing, press Enter to enter Date and start editing
+                        None => {
+                            self.add.editing = Some(EditField::Date);
+                        }
+                        // if you are currently editing, press Enter to exit editing (change back to None)
+                        Some(_) => {
+                            self.add.editing = None; 
+                        }
+                    }
+                }
+
+                KeyCode::Tab => {
+                    let next = match self.add.editing {
+                        Some(current) => self.next_field(current),
+                        None => EditField::Date, 
+                    };
+                    self.add.editing = Some(next);
+
+                    if matches!(next, EditField::Category) 
+                        && self.add.cat_sel.selected().is_none() 
+                        && !self.add.categories.is_empty() 
+                    {
+                        self.add.cat_sel.select(Some(0));
+                    }
+                }
+
+                KeyCode::Up => {
+                    if let Some(EditField::Category) = self.add.editing {
                         if self.add.cat_sel.selected().is_none() && !self.add.categories.is_empty() {
                             self.add.cat_sel.select(Some(0));
                         } else {
                             self.move_cat(-1);
                         }
                     }
-                    KeyCode::Down if matches!(field, EditField::Category) => {
+                }
+                KeyCode::Down => {
+                    if let Some(EditField::Category) = self.add.editing {
                         if self.add.cat_sel.selected().is_none() && !self.add.categories.is_empty() {
                             self.add.cat_sel.select(Some(0));
                         } else {
                             self.move_cat(1);
                         }
                     }
-                    KeyCode::Enter => {
-                        self.add.editing = None;
-                    }
-                    KeyCode::Tab => { 
-                        let nf = self.next_field(field);
-                        self.add.editing = Some(nf);
-                        if matches!(nf, EditField::Category)
-                            && self.add.cat_sel.selected().is_none()
-                            && !self.add.categories.is_empty()
-                        {
-                            self.add.cat_sel.select(Some(0));
-                        }
-                    }
-                    KeyCode::Esc => {
-                        self.add.editing = None;
-                    }
-                    _ => {}
                 }
-                return Ok(()); 
-            }
-
-            match k.code {
-                KeyCode::Up   => {}
-                KeyCode::Down => {}
-                // Enter does not commit in non-edit mode
-                KeyCode::Enter => {}
-
-                KeyCode::Esc | KeyCode::Char('b') => {
-                    self.tab = Tab::Transactions;
-                    self.add.error = None;
-                    self.add.success = None;
-                }
-                KeyCode::Char('p') => self.add.editing = Some(EditField::Payee),
-                KeyCode::Char('a') => self.add.editing = Some(EditField::Amount),
-                KeyCode::Char('m') => self.add.editing = Some(EditField::Memo),
-                KeyCode::Char('d') => self.add.editing = Some(EditField::Date),
-
-                KeyCode::Tab => {
-                    let cur = self.add.editing.unwrap_or(EditField::Date);
-                    self.add.editing = Some(self.next_field(cur));
-                    if matches!(self.add.editing, Some(EditField::Category))
-                        && self.add.cat_sel.selected().is_none()
-                        && !self.add.categories.is_empty()
-                    {
-                        self.add.cat_sel.select(Some(0));
+                
+                KeyCode::Esc => {
+                    if self.add.editing.is_some() {
+                        self.add.editing = None; 
+                    } else {
+                        self.tab = Tab::Transactions; 
                     }
                 }
-
-                KeyCode::Char('s') => {
-                    self.submit_txn().await.ok();
-                }
-
-                KeyCode::Char('?') => self.tab = Tab::Help,
-
                 _ => {}
             }
-
+            return Ok(()); 
         }
-
-
         Tab::Help => match k.code {
             KeyCode::Esc | KeyCode::Char('b') => self.tab = Tab::Accounts,
             _ => {}
@@ -626,83 +710,87 @@ impl App {
 // submit
 
     pub async fn submit_txn(&mut self) -> anyhow::Result<()> {
-        let acc = if let Some(id) = self.add.account_id {
-            id
-        } else {
+        let acc = if let Some(id) = self.add.account_id { id } else {
             self.add.error = Some("Please choose account".into());
             return Ok(());
         };
 
         let amt = if self.add.amount.trim().is_empty() {
-            self.add.error = Some("The amount can not be empty".into());
+            self.add.error = Some("Amount cannot be empty".into());
             return Ok(());
         } else {
             match Decimal::from_str_exact(self.add.amount.trim()) {
-                Ok(d) => Money(d),
+                Ok(d) => d,
                 Err(_) => {
-                    self.add.error = Some("The amount format was wrong".into());
+                    self.add.error = Some("Invalid amount format".into());
+                    return Ok(());
+                }
+            }
+        };
+        let mut decimal_amt = amt.abs();
+        if self.add.is_expense {
+            decimal_amt = -decimal_amt;
+        }
+        let final_amt = Money(decimal_amt);
+        let date_str = self.add.date.trim();
+        let date = if date_str.is_empty() {
+            chrono::Utc::now().date_naive()
+        } else {
+            match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                Ok(d) => d,
+                Err(_) => {
+                    self.add.error = Some("Date must be YYYY-MM-DD".into());
                     return Ok(());
                 }
             }
         };
 
-        let by_cat_is_expense = matches!(self.current_category_type(), Some(CategoryType::Expense));
-        let final_amt = if self.add.is_expense {
-            Money(-amt.0.abs())
-        } else {
-            Money(amt.0.abs())
-        };
-
-        let date = if self.add.date.trim().is_empty() { 
-            chrono::Utc::now().date_naive() 
-        } else { 
-            match NaiveDate::parse_from_str(&self.add.date, "%Y-%m-%d") 
-            { 
-                Ok(d) => d, 
-                Err(_) => 
-                { self.add.error = Some("Date formate should be YYYY-MM-DD".into()); 
-                    return Ok(()); 
-                } 
-            } 
-        };
-        let cat_id = self
-            .add
-            .cat_sel
-            .selected()
+        let cat_id = self.add.cat_sel.selected()
             .and_then(|i| self.add.categories.get(i))
             .map(|c| c.id);
 
+        if cat_id.is_none() {
+             self.add.error = Some("Category is required!".into());
+             return Ok(());
+        }
+
         let req = CreateTxnReq {
             account_id: acc,
-            category_id: cat_id,
+            category_id: cat_id.unwrap(), 
             amount: final_amt,
-            memo: if self.add.memo.trim().is_empty() {
-                None
-            } else {
-                Some(self.add.memo.clone())
+            base_amount: final_amt, 
+            is_expense: self.add.is_expense, 
+            description: if self.add.memo.trim().is_empty() { 
+                None 
+            } else { 
+                Some(self.add.memo.trim().to_string()) 
             },
-            currency: self
-                .current_account()
+            currency: self.current_account()
                 .map(|a| a.currency.clone())
                 .unwrap_or_else(|| "CAD".into()),
-            txn_date: date,
+            
+            transacted_at: date.and_hms_opt(0, 0, 0).unwrap(), 
         };
 
-        match self.api.create_transaction(&req).await {
+
+       match self.api.create_transaction(&req).await {
             Ok(_) => {
-                self.add.success = Some("Save ✓".into());
+                self.add.success = Some("Saved! ✓".into());
                 self.add.error = None;
                 self.add.amount.clear();
                 self.add.memo.clear();
                 self.refresh_txns().await.ok();
-                self.refresh_accounts().await.ok();
+                self.refresh_accounts().await.ok(); 
+
+                //let sync_res = self.api.trigger_sync().await;
+                self.status = "Sync feature not implemented yet".to_string();
+               
             }
             Err(e) => {
-                self.add.error = Some(format!("Fail to save:{e}"));
-                self.add.success = None;
+                eprintln!("DEBUG: API Error: {:?}", e);
+                self.add.error = Some(format!("Error: {}", e));
             }
         }
-
         Ok(())
     }
 }

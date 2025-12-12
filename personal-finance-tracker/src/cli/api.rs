@@ -62,50 +62,138 @@ impl Client {
         Ok(list)
     }
 
+    
+    async fn recompute_balance_exec<'e, E>(&self, executor: E, account_id: i64) -> anyhow::Result<()>
+    where
+        E: sqlx::Executor<'e, Database = Sqlite>,
+    {
+        sqlx::query!(
+            r#"
+            UPDATE accounts
+            SET balance = IFNULL((
+                SELECT ROUND(SUM(
+                    CASE WHEN t.is_expense = 1 THEN -CAST(t.amount AS NUMERIC)
+                        ELSE CAST(t.amount AS NUMERIC)
+                    END
+                ), 2)
+                FROM transactions t
+                WHERE t.account_id = ?
+            ), 0.00)
+            WHERE account_id = ?
+            "#,
+            account_id, account_id
+        )
+        .execute(executor)
+        .await?;
+        Ok(())
+    }
+
     pub async fn create_account(&self, req: &CreateAccountReq) -> Result<AccountDto> {
+    
+        let mut tx = self.pool.begin().await?;
+
         let row = sqlx::query(
             r#"
             INSERT INTO accounts (account_name, account_type, balance, currency, account_created_at)
-            VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-            RETURNING
-              account_id         AS id,
-              account_name       AS name,
-              account_type       AS atype,
-              currency           AS currency,
-              balance            AS balance,
-              account_created_at AS created_at
+            VALUES (?, ?, '0', ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+            RETURNING account_id, account_name, account_type, currency, account_created_at
             "#,
         )
         .bind(&req.name)
         .bind(req.r#type.as_str())
-        .bind(req.opening_balance.0.to_string())
         .bind(&req.currency)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
 
+        let account_id: i64 = row.try_get("account_id")?;
+
+        if !req.opening_balance.0.is_zero() {
+            let amount_str = req.opening_balance.0.to_string();
+            
+        
+            let cat_row = sqlx::query(
+                "SELECT category_id FROM categories WHERE category_name = 'Initial Balance'"
+            )
+            .fetch_optional(&mut *tx)
+            .await?;
+
+            let category_id: i64 = match cat_row {
+                Some(r) => r.try_get("category_id")?,
+                None => {
+                   
+                    let new_cat = sqlx::query(
+                        r#"
+                        INSERT INTO categories (category_name, category_type, icon) 
+                        VALUES ('Initial Balance', 'INCOME', '💰') 
+                        RETURNING category_id
+                        "#
+                    )
+                    .fetch_one(&mut *tx)
+                    .await?;
+                    new_cat.try_get("category_id")?
+                }
+            };
+           
+            sqlx::query(
+                r#"
+                INSERT INTO transactions 
+                (account_id, category_id, amount, base_amount, is_expense, description, currency, transacted_at, trans_create_at)
+                VALUES (?, ?, ?, ?, 0, 'Opening Balance', ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+                "#
+            )
+            .bind(account_id)
+            .bind(category_id)
+            .bind(&amount_str)
+            .bind(&amount_str)
+            .bind(&req.currency)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        self.recompute_balance_exec(&mut *tx, account_id).await?;
+
+        tx.commit().await?;
+
         Ok(AccountDto {
-            id: row.try_get("id")?,
-            name: row.try_get("name")?,
-            r#type: map_account_type(&row.try_get::<String, _>("atype")?),
+            id: account_id,
+            name: row.try_get("account_name")?,
+            r#type: map_account_type(&row.try_get::<String, _>("account_type")?),
             currency: row.try_get("currency")?,
-            opening_balance: Money(Decimal::from_str_exact(&row.try_get::<String, _>("balance")?).unwrap_or(Decimal::ZERO)),
-            created_at: row.try_get("created_at")?,
+            opening_balance: req.opening_balance.clone(),
+            created_at: row.try_get("account_created_at")?,
         })
     }
 
-    pub async fn balance(&self, account_id: i64) -> Result<BalanceDto> {
-        let opening: Option<String> = sqlx::query_scalar(
-            "SELECT balance FROM accounts WHERE account_id = ?",
+    pub async fn update_account(&self, id: i64, name: &str, atype: &str, currency: &str) -> Result<()> {
+        sqlx::query!(
+            r#"
+            UPDATE accounts 
+            SET account_name = ?, account_type = ?, currency = ?
+            WHERE account_id = ?
+            "#,
+            name,
+            atype,
+            currency,
+            id
         )
-        .bind(account_id)
-        .fetch_optional(&self.pool)
+        .execute(&self.pool)
         .await?;
+        Ok(())
+    }
 
-        let bal = opening
-            .and_then(|s| Decimal::from_str_exact(&s).ok())
-            .unwrap_or(Decimal::ZERO);
+    pub async fn delete_account(&self, id: i64) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        
+        sqlx::query!("DELETE FROM transactions WHERE account_id = ?", id)
+            .execute(&mut *tx)
+            .await?;
 
-        Ok(BalanceDto { account_id, balance: Money(bal) })
+        sqlx::query!("DELETE FROM accounts WHERE account_id = ?", id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(())
     }
 
     async fn recompute_account_balance(&self, account_id: i64) -> anyhow::Result<()> {
