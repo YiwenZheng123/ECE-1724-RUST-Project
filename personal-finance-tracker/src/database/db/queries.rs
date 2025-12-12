@@ -303,6 +303,7 @@ pub async fn get_transactions_by_account(
             base_amount:base_amount_decimal,
             is_expense: row.get("is_expense"),
             description: row.get("description"),
+            payee: row.get("payee"),
             currency: row.get("currency"),
             transacted_at: row.get("transacted_at"),
             trans_create_at: row.get("trans_create_at"),

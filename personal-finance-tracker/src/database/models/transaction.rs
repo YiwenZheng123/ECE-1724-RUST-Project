@@ -13,6 +13,7 @@ pub struct Transaction {
     pub base_amount: Decimal,
     pub is_expense: bool,
     pub description: Option<String>,
+    pub payee: Option<String>,
     pub currency: String,
     pub transacted_at: NaiveDateTime,   // scheduled transaction time
     pub trans_create_at: NaiveDateTime,
