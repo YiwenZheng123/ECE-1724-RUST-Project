@@ -22,6 +22,10 @@ impl Client {
         Ok(Self { pool })
     }
 
+    pub fn pool(&self) -> &Pool<Sqlite> {
+        &self.pool
+    }
+
     // Accounts
 
     pub async fn list_accounts(&self) -> Result<Vec<AccountDto>> {
