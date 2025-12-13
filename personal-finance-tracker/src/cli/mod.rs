@@ -9,6 +9,8 @@ use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, Key
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::{backend::CrosstermBackend, Terminal};
 
+use crate::database::db::{migrate, queries};
+
 pub mod api;
 pub mod state;
 pub mod input;
@@ -71,10 +73,12 @@ pub async fn init_app() -> Result<state::App> {
     // Create DB client
     let client = api::Client::sqlite(&db_url).await?;
     
-    
-    // let pool = client.pool();
+    let pool = client.pool();
+    // Run migrations
+    migrate::run_migrations(pool).await?;
 
-
+    // Seed categories
+    queries::seed_fixed_categories(pool).await?;
 
     // Create app state
     let app = state::App::new(client);
