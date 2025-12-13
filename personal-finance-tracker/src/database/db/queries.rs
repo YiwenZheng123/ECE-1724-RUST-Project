@@ -671,7 +671,7 @@ pub async fn seed_fixed_categories(pool: &Pool<Sqlite>) -> Result<(), sqlx::Erro
     for (id, name, cat_type) in categories {
         sqlx::query!(
             r#"
-            INSERT OR REPLACE INTO categories (category_id, category_name, category_type, icon)
+            INSERT OR IGNORE INTO categories (category_id, category_name, category_type, icon)
             VALUES (?, ?, ?, '')
             "#,
             id, name, cat_type
