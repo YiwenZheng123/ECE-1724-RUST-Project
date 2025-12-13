@@ -78,6 +78,21 @@ pub struct TransactionDto {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavingGoalDto {
+    pub id: i64,
+    pub name: String,
+    pub target_amount: Money,
+    pub current_amount: Money,
+    pub deadline: Option<String>, // YYYY-MM-DD
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CategorySpendingDto {
+    pub category: String,
+    pub total_amount: Money,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateAccountReq {
     pub name: String,
     pub r#type: AccountType,
@@ -110,6 +125,7 @@ pub enum Tab {
     Accounts,
     Transactions,
     AddTxn,
+    Dashboard,
     Help,
 }
 
@@ -140,6 +156,13 @@ pub struct TxnPage {
     pub account_id: Option<i64>,
     pub table: Vec<TransactionDto>,
     pub tsel: TableState,
+    pub loading: bool,
+}
+
+#[derive(Default)]
+pub struct DashboardPage {
+    pub goals: Vec<SavingGoalDto>,
+    pub report: Vec<CategorySpendingDto>,
     pub loading: bool,
 }
 
@@ -189,6 +212,7 @@ pub struct App {
 
     pub accounts: AccountsPage,
     pub txn: TxnPage,
+    pub dashboard: DashboardPage,
     pub add: AddTxnForm,
 }
 
@@ -205,8 +229,21 @@ impl App {
             quit: false,
             accounts: AccountsPage::default(),
             txn: TxnPage::default(),
+            dashboard: DashboardPage::default(),
             add,
         }
+    }
+
+    pub async fn refresh_dashboard(&mut self) -> anyhow::Result<()> {
+        self.dashboard.loading = true;
+        let goals = self.api.list_goals().await.unwrap_or_default();
+        let report = self.api.get_monthly_report().await.unwrap_or_default();
+
+        self.dashboard.goals = goals;
+        self.dashboard.report = report;
+        self.dashboard.loading = false;
+        
+        Ok(())
     }
 
     fn current_category_type(&self) -> Option<CategoryType> {
@@ -555,6 +592,11 @@ impl App {
                         self.accounts.show_delete_confirm = true;
                     }
                 }
+
+                KeyCode::Char('g') => {
+                         self.tab = Tab::Dashboard;
+                         self.refresh_dashboard().await.ok();
+                     }
                 KeyCode::Char('r') => { self.refresh_accounts().await.ok(); }
                 KeyCode::Char('?') => { self.tab = Tab::Help; }
                 KeyCode::Esc => { /* no-op */ }
@@ -729,13 +771,24 @@ impl App {
             }
             return Ok(());
         }
-        Tab::Help => match k.code {
-            KeyCode::Esc => self.tab = Tab::Accounts, 
-            _ => {}
-        },
+        
+
+        Tab::Dashboard => match k.code {
+                KeyCode::Esc => self.tab = Tab::Accounts, 
+                KeyCode::Char('r') => { self.refresh_dashboard().await.ok(); }
+                KeyCode::Char('?') => self.tab = Tab::Help,
+                _ => {}
+            },
+
+            
+            Tab::Help => match k.code {
+                KeyCode::Esc => self.tab = Tab::Accounts, 
+                _ => {}
+            },
+        }
+        Ok(())
     }
-    Ok(())
-}
+    
     fn move_account(&mut self, delta: isize) {
         let n = self.accounts.list.len();
         if n == 0 {
