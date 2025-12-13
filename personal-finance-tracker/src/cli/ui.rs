@@ -2,12 +2,14 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Row, Table, TableState, Tabs, Cell, Wrap},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Row, Table, TableState, Tabs, Cell, Wrap,Gauge, BarChart},
     Frame,
 };
 
+use ratatui::prelude::Alignment;
 use crate::cli::state::{self, App, AccField, EditField}; 
 use rust_decimal::Decimal;
+use crate::cli::state::Tab;
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     let size = f.size();
@@ -32,7 +34,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             state::Tab::Accounts => 0, 
             state::Tab::Transactions => 1, 
             state::Tab::AddTxn => 2, 
-            state::Tab::Help => 3 
+            Tab::Dashboard => 3,
+            state::Tab::Help => 4 
         })
         .block(Block::default().borders(Borders::ALL).title(" Finance Tracker "))
         .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)); 
@@ -43,6 +46,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         state::Tab::Accounts => draw_accounts(f, root[1], app),
         state::Tab::Transactions => draw_txns(f, root[1], app),
         state::Tab::AddTxn => draw_add_txn(f, root[1], app),
+        Tab::Dashboard => {ui_dashboard(f, &app.dashboard);}
         state::Tab::Help => draw_help(f, root[1]),
     }
 
@@ -450,4 +454,66 @@ fn center_rect(rect: Rect, w: u16, h: u16) -> Rect {
     let x = rect.x + rect.width.saturating_sub(w) / 2;
     let y = rect.y + rect.height.saturating_sub(h) / 2;
     Rect { x, y, width: w.min(rect.width), height: h.min(rect.height) }
+}
+
+use crate::cli::state::DashboardPage;
+use rust_decimal::prelude::ToPrimitive; 
+
+pub fn ui_dashboard(f: &mut Frame, page: &DashboardPage) {
+    if page.loading {
+        let p = Paragraph::new("Loading...").alignment(Alignment::Center);
+        f.render_widget(p, f.size());
+        return;
+    }
+
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(f.size());
+
+    let left_block = Block::default().title(" Savings Goals ").borders(Borders::ALL);
+    let left_area = left_block.inner(chunks[0]);
+    f.render_widget(left_block, chunks[0]);
+
+    if page.goals.is_empty() {
+        f.render_widget(Paragraph::new("No goals set").alignment(Alignment::Center), left_area);
+    } else {
+        let rows = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(vec![Constraint::Length(3); page.goals.len()])
+            .split(left_area);
+
+        for (i, goal) in page.goals.iter().enumerate() {
+            if i >= rows.len() { break; }
+            let current = goal.current_amount.0.to_f64().unwrap_or(0.0);
+            let target = goal.target_amount.0.to_f64().unwrap_or(1.0);
+            let ratio = (current / target).clamp(0.0, 1.0);
+            let percent = (ratio * 100.0) as u16;
+            
+            let label = format!("{} ({:.0}%)", goal.name, ratio * 100.0);
+            let gauge = Gauge::default()
+                .block(Block::default().borders(Borders::NONE))
+                .gauge_style(Style::default().fg(Color::Green))
+                .percent(percent)
+                .label(label);
+            f.render_widget(gauge, rows[i]);
+        }
+    }
+
+    let right_block = Block::default().title(" Monthly Spending ").borders(Borders::ALL);
+    let right_area = right_block.inner(chunks[1]);
+    f.render_widget(right_block, chunks[1]);
+
+    let bar_data: Vec<(&str, u64)> = page.report.iter()
+        .map(|r| (r.category.as_str(), r.total_amount.0.to_u64().unwrap_or(0)))
+        .collect();
+
+    let barchart = BarChart::default()
+        .data(&bar_data)
+        .bar_width(10)
+        .bar_gap(2)
+        .style(Style::default().fg(Color::Yellow))
+        .value_style(Style::default().bg(Color::Yellow).fg(Color::Black));
+    
+    f.render_widget(barchart, right_area);
 }

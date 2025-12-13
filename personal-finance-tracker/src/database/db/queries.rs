@@ -4,7 +4,9 @@ use std::str::FromStr;
 use sqlx::Row;
 use chrono::NaiveDateTime;
 use crate::database::models::{
-        Account, Category, Transaction, Tag, RecurringTransaction, Budget, SavingsGoal};
+        Account, Category, Transaction, Tag, RecurringTransaction, 
+        Budget, SavingsGoal, CategorySpending 
+};
 
 /*
 This file contains the specific SQL query, 
@@ -532,6 +534,42 @@ pub async fn update_goal_amount(
     Ok(())
 }
 
+pub async fn get_all_saving_goals(pool: &Pool<Sqlite>) -> Result<Vec<SavingsGoal>, sqlx::Error> {
+    sqlx::query(
+        r#"
+        SELECT 
+            goal_id, 
+            account_id, 
+            goal_name, 
+            target_amount, 
+            current_amount, 
+            deadline
+        FROM savings_goals
+        ORDER BY deadline ASC
+        "#
+    )
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        let target_str: String = row.get("target_amount");
+        let current_str: String = row.get("current_amount");
+
+        let target_dec = Decimal::from_str(&target_str).unwrap_or(Decimal::ZERO);
+        let current_dec = Decimal::from_str(&current_str).unwrap_or(Decimal::ZERO);
+
+        Ok(SavingsGoal {
+            goal_id: row.get("goal_id"),
+            account_id: row.get("account_id"),
+            goal_name: row.get("goal_name"),
+            target_amount: target_dec,
+            current_amount: current_dec,
+            deadline: row.get("deadline"), 
+        })
+    })
+    .collect::<Result<Vec<SavingsGoal>, sqlx::Error>>()
+}
+
 // ====================currency Queries======================
 pub async fn get_rate(pool: &Pool<Sqlite>, currency: &str) -> Result<Decimal, sqlx::Error> {
     let row = sqlx::query!(
@@ -642,4 +680,41 @@ pub async fn seed_fixed_categories(pool: &Pool<Sqlite>) -> Result<(), sqlx::Erro
         .await?;
     }
     Ok(())
+}
+
+pub async fn get_category_spending_report(
+    pool: &Pool<Sqlite>,
+    start_date: NaiveDateTime,
+    end_date: NaiveDateTime,
+) -> Result<Vec<CategorySpending>, sqlx::Error> {
+    let rows = sqlx::query(
+        r#"
+        SELECT 
+            c.category_name, 
+            SUM(CAST(t.amount AS REAL)) as total
+        FROM transactions t
+        JOIN categories c ON t.category_id = c.category_id
+        WHERE t.is_expense = 1 
+          AND t.transacted_at >= ? 
+          AND t.transacted_at <= ?
+        GROUP BY c.category_name
+        ORDER BY total DESC
+        "#
+    )
+    .bind(start_date)
+    .bind(end_date)
+    .fetch_all(pool)
+    .await?;
+
+    let result = rows.into_iter().map(|row| {
+        let total: f64 = row.try_get("total").unwrap_or(0.0);
+        let category: String = row.get("category_name");
+
+        CategorySpending {
+            category,
+            total_amount: Decimal::from_f64_retain(total).unwrap_or(Decimal::ZERO),
+        }
+    }).collect();
+
+    Ok(result)
 }
