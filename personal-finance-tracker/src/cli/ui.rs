@@ -24,9 +24,9 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         .split(size);
 
     // Tabs
-    let titles = ["Accounts", "Transactions", "AddTxn", "Help"]
-        .into_iter()
-        .map(|t| Line::from(Span::raw(t)))
+    let titles = ["Accounts", "Transactions", "AddTxn", "Goals", "Help"] 
+        .iter()
+        .map(|t| Line::from(Span::raw(*t)))
         .collect::<Vec<_>>();
     
     let tabs = Tabs::new(titles)
@@ -46,7 +46,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         state::Tab::Accounts => draw_accounts(f, root[1], app),
         state::Tab::Transactions => draw_txns(f, root[1], app),
         state::Tab::AddTxn => draw_add_txn(f, root[1], app),
-        Tab::Dashboard => {ui_dashboard(f, &app.dashboard);}
+        Tab::Dashboard => { ui_dashboard(f, &app.dashboard, root[1]); }
         state::Tab::Help => draw_help(f, root[1]),
     }
 
@@ -103,6 +103,12 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             
         f.render_widget(p, area);
     }
+
+    if app.tab == Tab::Dashboard && app.dashboard.creating {
+        let area = center_rect(root[1], 60, 12);
+        f.render_widget(Clear, area); 
+        draw_new_goal_modal(f, area, app);
+    }
 }
 
 // Accounts Page
@@ -129,7 +135,7 @@ fn draw_accounts(f: &mut Frame, area: Rect, app: &mut App) {
     }).collect();
 
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(" Accounts (n:New e:Edit d:Del Enter:Txns) "))
+        .block(Block::default().borders(Borders::ALL).title(" Accounts (n:New e:Edit d:Del g: Goal Enter:Txns) "))
         .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD));
 
     f.render_stateful_widget(list, cols[0], &mut app.accounts.sel);
@@ -157,6 +163,48 @@ fn draw_accounts(f: &mut Frame, area: Rect, app: &mut App) {
     f.render_widget(right, cols[1]);
 }
 
+
+fn draw_new_goal_modal(f: &mut Frame, area: Rect, app: &mut App) {
+    let form = &app.dashboard.form;
+    use crate::cli::state::GoalField;
+
+    let style_line = |target: GoalField, label: &str, value: &str| -> Line {
+        if Some(target) == form.editing {
+            Line::from(vec![
+                Span::styled(" > ", Style::default().fg(Color::Yellow)),
+                Span::styled(format!("{:<10}: {}", label, value), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            ])
+        } else {
+             Line::from(vec![
+                Span::raw("   "),
+                Span::raw(format!("{:<10}: {}", label, value)),
+            ])
+        }
+    };
+
+    let mut lines = vec![
+        Line::from(""),
+        style_line(GoalField::Name, "Goal Name", &form.name),
+        style_line(GoalField::Target, "Target $", &form.target),
+        style_line(GoalField::Current, "Current $", &form.current),
+        style_line(GoalField::Deadline, "Deadline", &form.deadline),
+        Line::from(""),
+        Line::from(Span::styled(" [Enter] Save   [Esc] Cancel ", Style::default().add_modifier(Modifier::DIM))),
+    ];
+
+    if let Some(err) = &form.error {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(format!(" Error: {}", err), Style::default().fg(Color::Red))));
+    }
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Create New Saving Goal ")
+        .style(Style::default().bg(Color::Black));
+
+    let p = Paragraph::new(lines).block(block);
+    f.render_widget(p, area);
+}
 
 fn draw_new_account_modal(f: &mut Frame, area: Rect, app: &mut App) {
     let form = &app.accounts.form;
@@ -415,7 +463,7 @@ fn draw_add_txn(f: &mut Frame, area: Rect, app: &mut App) {
 }
 
 fn draw_help(f: &mut Frame, area: Rect) {
-    let help_text = vec![
+   let help_text = vec![
         "Global Keys:",
         "  q        : Quit App",
         "  ?        : Toggle this Help",
@@ -431,8 +479,17 @@ fn draw_help(f: &mut Frame, area: Rect) {
         "Transactions Tab:",
         "  a        : Add Transaction",
         "  x/Del    : Delete Transaction",
-        "  Esc      : Back to Accounts", 
+        "  Esc      : Back to Accounts",
         "",
+        
+        "Dashboard / Goals Tab:",
+        "  n        : New Saving Goal",
+        "  e        : Edit Selected Goal (Update Amount)",
+        "  d        : Delete Selected Goal",
+        "  ↑ / ↓    : Select Goal",
+        "  Esc      : Back to Accounts",
+        "",
+    
         "Add Transaction Tab:",
         "  Ctrl+s   : Save",
         "  t        : Toggle Expense/Income",
@@ -459,24 +516,24 @@ fn center_rect(rect: Rect, w: u16, h: u16) -> Rect {
 use crate::cli::state::DashboardPage;
 use rust_decimal::prelude::ToPrimitive; 
 
-pub fn ui_dashboard(f: &mut Frame, page: &DashboardPage) {
+pub fn ui_dashboard(f: &mut Frame, page: &DashboardPage, area: Rect) { 
     if page.loading {
         let p = Paragraph::new("Loading...").alignment(Alignment::Center);
-        f.render_widget(p, f.size());
+        f.render_widget(p, area); 
         return;
     }
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(f.size());
+        .split(area); 
 
-    let left_block = Block::default().title(" Savings Goals ").borders(Borders::ALL);
+    let left_block = Block::default().title(" Savings Goals (n:New e:Edit d:Del ↑/↓:Select) ").borders(Borders::ALL);
     let left_area = left_block.inner(chunks[0]);
     f.render_widget(left_block, chunks[0]);
 
     if page.goals.is_empty() {
-        f.render_widget(Paragraph::new("No goals set").alignment(Alignment::Center), left_area);
+        f.render_widget(Paragraph::new("No goals set (Press 'n' to add)").alignment(Alignment::Center), left_area);
     } else {
         let rows = Layout::default()
             .direction(Direction::Vertical)
@@ -489,13 +546,21 @@ pub fn ui_dashboard(f: &mut Frame, page: &DashboardPage) {
             let target = goal.target_amount.0.to_f64().unwrap_or(1.0);
             let ratio = (current / target).clamp(0.0, 1.0);
             let percent = (ratio * 100.0) as u16;
-            
-            let label = format!("{} ({:.0}%)", goal.name, ratio * 100.0);
+
+            let is_selected = i == page.selected_index;
+            let label_color = if is_selected { Color::Yellow } else { Color::White };
+            let prefix = if is_selected { "> " } else { "  " };
+
+            let label = format!("{}{}: {}/{} ({:.0}%)", prefix, goal.name, goal.current_amount.0, goal.target_amount.0, ratio * 100.0);
+
+           
             let gauge = Gauge::default()
                 .block(Block::default().borders(Borders::NONE))
-                .gauge_style(Style::default().fg(Color::Green))
+                .gauge_style(Style::default().fg(Color::Green)) 
+                .style(Style::default().fg(label_color))       
                 .percent(percent)
-                .label(label);
+                .label(Span::styled(label, Style::default().fg(label_color).add_modifier(Modifier::BOLD)));
+
             f.render_widget(gauge, rows[i]);
         }
     }
@@ -508,9 +573,21 @@ pub fn ui_dashboard(f: &mut Frame, page: &DashboardPage) {
         .map(|r| (r.category.as_str(), r.total_amount.0.to_u64().unwrap_or(0)))
         .collect();
 
+    let labels: Vec<String> = page.report.iter()
+        .map(|r| format!("{} ${}", r.category, r.total_amount.0)) 
+        .collect();
+
+    let bar_data: Vec<(&str, u64)> = page.report.iter()
+        .zip(labels.iter()) 
+        .map(|(r, label)| (
+            label.as_str(), 
+            r.total_amount.0.to_u64().unwrap_or(0) 
+        ))
+        .collect();
+
     let barchart = BarChart::default()
         .data(&bar_data)
-        .bar_width(10)
+        .bar_width(15)
         .bar_gap(2)
         .style(Style::default().fg(Color::Yellow))
         .value_style(Style::default().bg(Color::Yellow).fg(Color::Black));

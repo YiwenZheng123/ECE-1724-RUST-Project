@@ -14,6 +14,25 @@ pub enum AccountType {
     Cash,
     Other,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GoalField {
+    Name,
+    Target,
+    Current,
+    Deadline, // YYYY-MM-DD
+}
+
+#[derive(Default, Clone)]
+pub struct GoalForm {
+    pub name: String,
+    pub target: String,
+    pub current: String,
+    pub deadline: String,
+    pub error: Option<String>,
+    pub editing: Option<GoalField>,
+}
+
 impl Default for AccountType {
     fn default() -> Self {
         AccountType::Cash
@@ -164,6 +183,10 @@ pub struct DashboardPage {
     pub goals: Vec<SavingGoalDto>,
     pub report: Vec<CategorySpendingDto>,
     pub loading: bool,
+    pub creating: bool,
+    pub editing_id: Option<i64>,
+    pub form: GoalForm,
+    pub selected_index: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -232,6 +255,28 @@ impl App {
             dashboard: DashboardPage::default(),
             add,
         }
+    }
+    
+    fn next_goal_field(&self, f: GoalField) -> GoalField {
+        use GoalField::*;
+        match f {
+            Name => Target,
+            Target => Current, 
+            Current => Deadline, 
+            Deadline => Name,
+        }
+    }
+
+    pub async fn refresh_goals(&mut self) -> anyhow::Result<()> {
+        let goals = self.api.list_goals().await.unwrap_or_default();
+        self.dashboard.goals = goals;
+        Ok(())
+    }
+
+    pub async fn refresh_monthly_report(&mut self) -> anyhow::Result<()> {
+        let report = self.api.get_monthly_report().await.unwrap_or_default();
+        self.dashboard.report = report;
+        Ok(())
     }
 
     pub async fn refresh_dashboard(&mut self) -> anyhow::Result<()> {
@@ -761,25 +806,110 @@ impl App {
 
                 KeyCode::Up => self.move_cat(-1),
                 KeyCode::Down => self.move_cat(1),
-                KeyCode::Enter => {
-                    if self.add.editing.is_none() {
-                        self.add.editing = Some(EditField::Date);
-                    }
-                }
-                
                 _ => {}
             }
             return Ok(());
         }
         
 
-        Tab::Dashboard => match k.code {
-                KeyCode::Esc => self.tab = Tab::Accounts, 
-                KeyCode::Char('r') => { self.refresh_dashboard().await.ok(); }
-                KeyCode::Char('?') => self.tab = Tab::Help,
-                _ => {}
-            },
+        Tab::Dashboard => {
+                if self.dashboard.creating {
+                  
+                    use crate::cli::state::GoalField;
+                    match k.code {
+                        KeyCode::Esc => { self.dashboard.creating = false; }
+                        KeyCode::Tab => {
+                            let cur = self.dashboard.form.editing.unwrap_or(GoalField::Name);
+                            self.dashboard.form.editing = Some(self.next_goal_field(cur));
+                        }
+                        KeyCode::Char(c) => {
+                            if let Some(f) = self.dashboard.form.editing {
+                                match f {
+                                    GoalField::Name => self.dashboard.form.name.push(c),
+                                    GoalField::Target => { if c.is_ascii_digit() || c == '.' { self.dashboard.form.target.push(c); } },
+                                    GoalField::Current => { if c.is_ascii_digit() || c == '.' { self.dashboard.form.current.push(c); } },
+                                    GoalField::Deadline => self.dashboard.form.deadline.push(c),
+                                }
+                            }
+                        }
+                        KeyCode::Backspace => {
+                            if let Some(f) = self.dashboard.form.editing {
+                                match f {
+                                    GoalField::Name => { self.dashboard.form.name.pop(); },
+                                    GoalField::Target => { self.dashboard.form.target.pop(); },
+                                    GoalField::Current => { self.dashboard.form.current.pop(); },
+                                    GoalField::Deadline => { self.dashboard.form.deadline.pop(); },
+                                }
+                            }
+                        }
+                        KeyCode::Enter => { self.submit_goal().await.ok(); }
+                        _ => {}
+                    }
+                } else {
+                   
+                    match k.code {
+                        KeyCode::Esc => self.tab = Tab::Accounts,
+                        KeyCode::Char('r') => { self.refresh_dashboard().await.ok(); }
+                        KeyCode::Char('?') => self.tab = Tab::Help,
+                        
+                       
+                        KeyCode::Down => {
+                            let len = self.dashboard.goals.len();
+                            if len > 0 {
+                                self.dashboard.selected_index = (self.dashboard.selected_index + 1) % len;
+                            }
+                        }
+                        KeyCode::Up => {
+                            let len = self.dashboard.goals.len();
+                            if len > 0 {
+                                if self.dashboard.selected_index == 0 {
+                                    self.dashboard.selected_index = len - 1;
+                                } else {
+                                    self.dashboard.selected_index -= 1;
+                                }
+                            }
+                        }
 
+                      
+                        KeyCode::Char('n') => {
+                            self.dashboard.creating = true;
+                            self.dashboard.editing_id = None; 
+                            self.dashboard.form = GoalForm::default();
+                            self.dashboard.form.editing = Some(GoalField::Name);
+                        }
+
+                      
+                        KeyCode::Char('e') => {
+                            if let Some(goal) = self.dashboard.goals.get(self.dashboard.selected_index) { 
+                                self.dashboard.creating = true;
+                                self.dashboard.editing_id = Some(goal.id); 
+                                let date_clean = goal.deadline.clone().unwrap_or_default().chars().take(10).collect();
+
+                                self.dashboard.form = GoalForm {
+                                    name: goal.name.clone(),
+                                    target: goal.target_amount.0.to_string(),
+                                    current: goal.current_amount.0.to_string(),
+                                    deadline: date_clean,
+                                    error: None,
+                                    editing: Some(GoalField::Current),
+                                };
+                            }
+                        }
+
+               
+                        KeyCode::Char('d') | KeyCode::Delete => {
+                            if let Some(goal) = self.dashboard.goals.get(self.dashboard.selected_index) {
+                                self.api.delete_goal(goal.id).await.ok();
+                                self.refresh_dashboard().await.ok();
+                                if self.dashboard.selected_index >= self.dashboard.goals.len() && !self.dashboard.goals.is_empty() {
+                                    self.dashboard.selected_index = self.dashboard.goals.len() - 1;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            },
             
             Tab::Help => match k.code {
                 KeyCode::Esc => self.tab = Tab::Accounts, 
@@ -897,5 +1027,60 @@ impl App {
         }
         Ok(())
     } 
+
+    pub async fn submit_goal(&mut self) -> anyhow::Result<()> {
+        let name = self.dashboard.form.name.trim();
+        if name.is_empty() {
+            self.dashboard.form.error = Some("Name cannot be empty".into());
+            return Ok(());
+        }
+
+        let target_str = self.dashboard.form.target.trim();
+       
+        let target_dec = if target_str.is_empty() { Decimal::ZERO } else { Decimal::from_str_exact(target_str).unwrap_or(Decimal::ZERO) };
+
+        let current_str = self.dashboard.form.current.trim();
+        
+        let current_dec = if current_str.is_empty() { Decimal::ZERO } else { Decimal::from_str_exact(current_str).unwrap_or(Decimal::ZERO) };
+
+      
+        let date_str = self.dashboard.form.deadline.trim();
+        let deadline_opt = if date_str.is_empty() {
+            None
+        } else {
+            match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                Ok(d) => Some(d.and_hms_opt(0,0,0).unwrap()),
+                Err(_) => {
+                    self.dashboard.form.error = Some("Date must be YYYY-MM-DD".into());
+                    return Ok(());
+                }
+            }
+        };
+
+       
+        let req = crate::cli::api::CreateGoalReq {
+            account_id: 1, 
+            name: name.to_string(),
+            target_amount: Money(target_dec),
+            current_amount: Money(current_dec),
+            deadline: deadline_opt,
+        };
+
+      
+        if let Some(id) = self.dashboard.editing_id {
+          
+            self.api.update_goal(id, &req).await?; 
+        } else {
+           
+            self.api.create_goal(&req).await?; 
+        }
+       
+        self.dashboard.creating = false;
+        self.dashboard.editing_id = None; 
+        self.refresh_goals().await.ok();
+        self.status = "Goal saved.".into();
+
+        Ok(())
+    }
 } 
     
