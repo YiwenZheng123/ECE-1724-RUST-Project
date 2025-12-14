@@ -30,6 +30,14 @@ pub async fn run() -> Result<()> {
 
     app.refresh_accounts().await?;
 
+    if let Err(e) = app.refresh_goals().await {
+        eprintln!("Failed to load goals: {}", e);
+    }
+ 
+    if let Err(e) = app.refresh_monthly_report().await {
+        eprintln!("Failed to load report: {}", e);
+    }
+
     let tick_rate = Duration::from_millis(200);
     let mut last_tick = Instant::now();
 
@@ -79,6 +87,7 @@ pub async fn init_app() -> Result<state::App> {
 
     // Seed categories
     queries::seed_fixed_categories(pool).await?;
+    
 
     // Create app state
     let app = state::App::new(client);

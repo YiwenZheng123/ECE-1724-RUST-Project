@@ -13,9 +13,16 @@ pub struct Client {
     pool: Pool<Sqlite>,
 }
 
+pub struct CreateGoalReq {
+    pub account_id: i64, 
+    pub name: String,
+    pub target_amount: super::state::Money,
+    pub current_amount: super::state::Money,
+    pub deadline: Option<chrono::NaiveDateTime>,
+}
+
 impl Client {
     pub async fn sqlite(db_url: &str) -> Result<Self> {
-
         
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
@@ -29,13 +36,65 @@ impl Client {
 
         Ok(Self { pool })
     }
+    pub async fn delete_goal(&self, id: i64) -> anyhow::Result<()> {
+        sqlx::query("DELETE FROM savings_goals WHERE goal_id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
 
     pub fn pool(&self) -> &Pool<Sqlite> {
         &self.pool
     }
-   
-    // ================= Accounts =================
 
+    pub async fn update_goal(&self, id: i64, req: &CreateGoalReq) -> anyhow::Result<()> {
+        let amount_str = req.target_amount.0.to_string();
+        let current_str = req.current_amount.0.to_string();
+        let deadline_str = req.deadline.map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string());
+
+        sqlx::query(
+            r#"
+            UPDATE savings_goals 
+            SET goal_name=?, target_amount=?, current_amount=?, deadline=?
+            WHERE goal_id=?
+            "#
+        )
+        .bind(&req.name)
+        .bind(&amount_str)
+        .bind(&current_str)
+        .bind(deadline_str)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn create_goal(&self, req: &CreateGoalReq) -> anyhow::Result<()> {
+        let amount_str = req.target_amount.0.to_string();
+        let current_str = req.current_amount.0.to_string();
+        
+        // Handle deadline: if None, insert NULL, otherwise insert string
+        let deadline_str = req.deadline.map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string());
+
+        sqlx::query(
+            r#"
+            INSERT INTO savings_goals (account_id, goal_name, target_amount, current_amount, deadline)
+            VALUES (?, ?, ?, ?, ?)
+            "#
+        )
+        .bind(req.account_id)
+        .bind(&req.name)
+        .bind(&amount_str)
+        .bind(&current_str)
+        .bind(deadline_str)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+   
+    // Accounts
     pub async fn list_accounts(&self) -> Result<Vec<AccountDto>> {
         let rows = sqlx::query("SELECT account_id, account_name, account_type, currency, balance, account_created_at FROM accounts ORDER BY account_id")
             .fetch_all(&self.pool).await?;
@@ -161,7 +220,6 @@ impl Client {
     }
 
     // ================= Transactions =================
-
     pub async fn list_transactions(&self, account_id: i64, limit: Option<i64>, offset: Option<i64>) -> Result<Vec<TransactionDto>> {
         let rows = sqlx::query(
             r#"
@@ -309,7 +367,7 @@ impl Client {
             out.push(SavingGoalDto {
                 id: r.try_get("goal_id")?,
                 name: r.try_get("goal_name")?,
-                target_amount: Money(Decimal::from_str_exact(&r.try_get::<String, _>("target_amount")?).unwrap_or(Decimal::ZERO)),
+                target_amount: Money(Decimal::from_str_exact(&r.try_get::<String, _>("target_amount")?).unwrap_or(Decimal::ZERO)),          
                 current_amount: Money(Decimal::from_str_exact(&r.try_get::<String, _>("current_amount")?).unwrap_or(Decimal::ZERO)),
                 deadline: r.try_get("deadline")?,
             });
@@ -318,11 +376,22 @@ impl Client {
     }
 
     pub async fn get_monthly_report(&self) -> Result<Vec<CategorySpendingDto>> {
-        let now = chrono::Local::now();
-        let start_str = format!("{}-01 00:00:00", now.format("%Y-%m")); 
-        let end_str = now.format("%Y-%m-%d %H:%M:%S").to_string();
-        let rows = sqlx::query("SELECT c.category_name, SUM(CAST(t.amount AS REAL)) as total FROM transactions t JOIN categories c ON t.category_id = c.category_id WHERE t.is_expense = 1 AND t.transacted_at >= ? AND t.transacted_at <= ? GROUP BY c.category_name ORDER BY total DESC")
-            .bind(start_str).bind(end_str).fetch_all(&self.pool).await?;
+        //let now = chrono::Local::now();
+       // let start_str = format!("{}-01 00:00:00", now.format("%Y-%m")); 
+        //let end_str = now.format("%Y-%m-%d %H:%M:%S").to_string();
+        let rows = sqlx::query(
+            r#"
+            SELECT 
+                c.category_name, 
+                SUM(ABS(CAST(t.amount AS REAL))) as total
+            FROM transactions t 
+            JOIN categories c ON t.category_id = c.category_id 
+            WHERE t.is_expense = 1 
+            GROUP BY c.category_name 
+            ORDER BY total DESC
+            "#
+        ).fetch_all(&self.pool)
+        .await?;
         let mut out = Vec::new();
         for r in rows {
             out.push(CategorySpendingDto {
