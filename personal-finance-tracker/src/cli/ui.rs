@@ -138,7 +138,7 @@ fn draw_accounts(f: &mut Frame, area: Rect, app: &mut App) {
             Span::raw("] "),
             Span::raw(padding), 
             Span::raw(format!("{:<8}", a.currency)),
-            Span::styled(format!("{:>18}",fmt_money(a.opening_balance.0)), Style::default().fg(balance_color)),
+            Span::styled(format!("{:>13}",fmt_money(a.opening_balance.0)), Style::default().fg(balance_color)),
         ]);
         ListItem::new(line)
     }).collect();

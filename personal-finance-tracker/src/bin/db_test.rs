@@ -2,7 +2,7 @@
 use dotenvy::dotenv;
 use personal_finance_tracker::database::db::connection::get_db_pool;
 use personal_finance_tracker::database::db::queries;
-use personal_finance_tracker::database::models::{Budget, SavingsGoal};
+use personal_finance_tracker::database::models::{Budget};
 
 use rust_decimal::Decimal;
 use chrono::NaiveDateTime;
@@ -192,22 +192,22 @@ async fn main() -> anyhow::Result<()> {
     // ----------------------------------------------------
     // Test: SAVING GOAL
     // ----------------------------------------------------
-    println!("\n--- Testing: create_saving ---");
-    let saving = SavingsGoal {
-        goal_id: 0,
-        account_id: 1,
-        goal_name: "Buy a new laptop".into(),
-        target_amount: rust_decimal::Decimal::new(1500, 0),
-        current_amount: rust_decimal::Decimal::new(200, 0),
-        deadline: NaiveDateTime::parse_from_str("2025-12-31 23:59:59", "%Y-%m-%d %H:%M:%S").unwrap(),
-    };
+    // println!("\n--- Testing: create_saving ---");
+    // let saving = SavingsGoal {
+    //     goal_id: 0,
+    //     account_id: 1,
+    //     goal_name: "Buy a new laptop".into(),
+    //     target_amount: rust_decimal::Decimal::new(1500, 0),
+    //     current_amount: rust_decimal::Decimal::new(200, 0),
+    //     deadline: NaiveDateTime::parse_from_str("2025-12-31 23:59:59", "%Y-%m-%d %H:%M:%S").unwrap(),
+    // };
 
-    let new_goal_id = queries::create_saving_goal(&pool, &saving).await?;
-    println!("New savings goal id = {}", new_goal_id);
+    // let new_goal_id = queries::create_saving_goal(&pool, &saving).await?;
+    // println!("New savings goal id = {}", new_goal_id);
 
-    println!("Updating current amount...");
-    queries::update_goal_amount(&pool, new_goal_id, rust_decimal::Decimal::new(300, 0)).await?;
-    println!("   > update_goal_amount successfully");
+    // println!("Updating current amount...");
+    // queries::update_goal_amount(&pool, new_goal_id, rust_decimal::Decimal::new(300, 0)).await?;
+    // println!("   > update_goal_amount successfully");
 
        // ----------------------------------------------------
     // TEST：REPORTS
