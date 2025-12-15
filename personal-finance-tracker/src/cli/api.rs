@@ -376,9 +376,9 @@ impl Client {
     }
 
     pub async fn get_monthly_report(&self) -> Result<Vec<CategorySpendingDto>> {
-        //let now = chrono::Local::now();
-       // let start_str = format!("{}-01 00:00:00", now.format("%Y-%m")); 
-        //let end_str = now.format("%Y-%m-%d %H:%M:%S").to_string();
+        let now = chrono::Utc::now();
+        let start_str = format!("{}-01 00:00:00", now.format("%Y-%m")); 
+        let end_str = now.format("%Y-%m-%d %H:%M:%S").to_string();
         let rows = sqlx::query(
             r#"
             SELECT 
@@ -387,10 +387,14 @@ impl Client {
             FROM transactions t 
             JOIN categories c ON t.category_id = c.category_id 
             WHERE t.is_expense = 1 
+                AND t.transacted_at >= ?1
+                AND t.transacted_at <= ?2
             GROUP BY c.category_name 
             ORDER BY total DESC
             "#
-        ).fetch_all(&self.pool)
+        ).bind(start_str)
+        .bind(end_str)
+        .fetch_all(&self.pool)
         .await?;
         let mut out = Vec::new();
         for r in rows {
