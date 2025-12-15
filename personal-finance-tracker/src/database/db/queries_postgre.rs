@@ -10,6 +10,8 @@ use rust_decimal::prelude::*;
 This file contains the specific PostgreSQL query, 
 CRUD (Create, Read, Update, Delete) logic 
 and is responsible for interacting with the database.
+
+This file is kept for further improvement.
  */
 
  /*==========Account Queries=========== */

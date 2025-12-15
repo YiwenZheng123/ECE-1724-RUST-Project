@@ -291,13 +291,13 @@ impl App {
         Ok(())
     }
 
-    fn current_category_type(&self) -> Option<CategoryType> {
-        self.add
-            .cat_sel
-            .selected()
-            .and_then(|i| self.add.categories.get(i))
-            .map(|c| c.r#type.clone())
-    }
+    // fn current_category_type(&self) -> Option<CategoryType> {
+    //     self.add
+    //         .cat_sel
+    //         .selected()
+    //         .and_then(|i| self.add.categories.get(i))
+    //         .map(|c| c.r#type.clone())
+    // }
     pub async fn refresh_accounts(&mut self) -> anyhow::Result<()> {
         let data = self.api.list_accounts().await?;
         self.accounts.list = data;
@@ -405,16 +405,16 @@ impl App {
 
 
 
-    fn next_field(&self, f: EditField) -> EditField {
-        use EditField::*;
-        match f { 
-            Date     => Payee,
-            Payee    => Memo,
-            Memo     => Category,
-            Category => Amount,
-            Amount   => Date
-        }
-    }
+    // fn next_field(&self, f: EditField) -> EditField {
+    //     use EditField::*;
+    //     match f { 
+    //         Date     => Payee,
+    //         Payee    => Memo,
+    //         Memo     => Category,
+    //         Category => Amount,
+    //         Amount   => Date
+    //     }
+    // }
 
     fn acc_next_field(&self, f: AccField) -> AccField {
         use AccField::*;
@@ -431,7 +431,6 @@ impl App {
     }
 
     pub async fn handle_key(&mut self, k: KeyEvent) -> anyhow::Result<()> {
-        use crossterm::event::KeyCode;
         use crate::cli::state::AccField;
         if k.kind != KeyEventKind::Press {
             return Ok(());
@@ -484,8 +483,7 @@ impl App {
 
             
             if self.accounts.creating {
-                use crossterm::event::KeyCode;
-                use crate::cli::state::{AccField, AccountType};
+                use crate::cli::state::{AccField};
                 match k.code {
                     KeyCode::Char(c) => {
                         if let Some(f) = self.accounts.form.editing {
@@ -652,7 +650,7 @@ impl App {
             KeyCode::Up   => self.move_txn(-1),
             KeyCode::Down => self.move_txn(1),
             KeyCode::Char('a') => {
-                use crate::cli::state::EditField;
+                // use crate::cli::state::EditField;
                 self.tab = Tab::AddTxn;
                 self.add.account_id = self.current_account_id();
                 self.add.editing = None; 
