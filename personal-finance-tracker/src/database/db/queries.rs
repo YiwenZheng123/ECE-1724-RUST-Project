@@ -4,7 +4,7 @@ use std::str::FromStr;
 use sqlx::Row;
 use chrono::NaiveDateTime;
 use crate::database::models::{
-        Account, Category, Transaction, Tag, RecurringTransaction, 
+        Account, Category, Transaction, RecurringTransaction, 
         Budget, SavingsGoal, CategorySpending 
 };
 
@@ -312,40 +312,6 @@ pub async fn get_transactions_by_account(
         })
     })
     .collect::<Result<Vec<Transaction>, sqlx::Error>>()
-}
-
-// ====================Tag Queries======================
-// create Tag
-pub async fn create_tag(pool: &Pool<Sqlite>, tag: &str) -> Result<i64, sqlx::Error> {
-    let id = sqlx::query!(
-        "INSERT INTO tags (tag) VALUES (?) RETURNING tag_id",
-        tag
-    )
-    .fetch_one(pool)
-    .await?
-    .tag_id;
-    Ok(id)
-}
-
-// get all Tags
-pub async fn get_all_tags(pool: &Pool<Sqlite>) -> Result<Vec<Tag>, sqlx::Error> {
-    sqlx::query_as!(Tag, "SELECT * FROM tags").fetch_all(pool).await
-}
-
-// bind Tag with Transaction
-pub async fn add_tag_to_transaction(
-    pool: &Pool<Sqlite>,
-    transaction_id: i64,
-    tag_id: i64
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        "INSERT INTO transaction_tags (transaction_id, tag_id) VALUES (?, ?)",
-        transaction_id,
-        tag_id
-    )
-    .execute(pool)
-    .await?;
-    Ok(())
 }
 
 /* ====================Recurring Queries====================== */
