@@ -2,7 +2,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Row, Table, TableState, Tabs, Cell, Wrap,Gauge, BarChart},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Row, Table, Tabs, Cell, Wrap,Gauge, BarChart},
     Frame,
 };
 
@@ -123,13 +123,22 @@ fn draw_accounts(f: &mut Frame, area: Rect, app: &mut App) {
        
         let balance_color = if a.opening_balance.0.is_sign_negative() { Color::Red } else { Color::Green };
         
+        let type_str = format!("{:?}", a.r#type); 
+        let type_len = type_str.len();
+
+        // Calculate the number of spaces that need to be filled
+        const TYPE_WIDTH: usize = 15;
+        let padding_len = TYPE_WIDTH.saturating_sub(type_len+3);
+        let padding = " ".repeat(padding_len);
+
         let line = Line::from(vec![
-            Span::styled(format!("{:<20}", a.name), Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{:<18}", a.name), Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(" ["), 
-            Span::styled(format!("{:?}", a.r#type), Style::default().fg(Color::Cyan)), 
+            Span::styled(type_str, Style::default().fg(Color::Cyan)), 
             Span::raw("] "),
-            Span::raw(format!("{} ", a.currency)),
-            Span::styled(fmt_money(a.opening_balance.0), Style::default().fg(balance_color)),
+            Span::raw(padding), 
+            Span::raw(format!("{:<8}", a.currency)),
+            Span::styled(format!("{:>18}",fmt_money(a.opening_balance.0)), Style::default().fg(balance_color)),
         ]);
         ListItem::new(line)
     }).collect();
@@ -569,9 +578,9 @@ pub fn ui_dashboard(f: &mut Frame, page: &DashboardPage, area: Rect) {
     let right_area = right_block.inner(chunks[1]);
     f.render_widget(right_block, chunks[1]);
 
-    let bar_data: Vec<(&str, u64)> = page.report.iter()
-        .map(|r| (r.category.as_str(), r.total_amount.0.to_u64().unwrap_or(0)))
-        .collect();
+    // let bar_data: Vec<(&str, u64)> = page.report.iter()
+    //     .map(|r| (r.category.as_str(), r.total_amount.0.to_u64().unwrap_or(0)))
+    //     .collect();
 
     let labels: Vec<String> = page.report.iter()
         .map(|r| format!("{} ${}", r.category, r.total_amount.0)) 

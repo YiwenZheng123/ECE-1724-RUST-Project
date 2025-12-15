@@ -449,9 +449,9 @@ pub async fn create_budget(pool: &Pool<Sqlite>, b: &Budget) -> Result<i64, sqlx:
         b.account_id,
         b.category_id,
         b.period,
-        amount_str,       // Decimal 类型，SQLx 会自动处理
+        amount_str, 
         b.currency,
-        b.start_date,   // NaiveDateTime 类型
+        b.start_date, 
     )
     .execute(pool)
     .await?
@@ -571,27 +571,26 @@ pub async fn get_all_saving_goals(pool: &Pool<Sqlite>) -> Result<Vec<SavingsGoal
 }
 
 // ====================currency Queries======================
-pub async fn get_rate(pool: &Pool<Sqlite>, currency: &str) -> Result<Decimal, sqlx::Error> {
-    let row = sqlx::query!(
+pub async fn get_rate(
+    pool: &Pool<Sqlite>,
+    currency: &str
+) -> Result<Decimal, sqlx::Error> {
+
+    let row = sqlx::query(
         r#"
-        SELECT rate_to_base as rate_to_base
+        SELECT rate_to_base
         FROM currency_rates
-        WHERE currency = $1
-        "#,
-        currency
+        WHERE currency = ?
+        "#
     )
+    .bind(currency)
     .fetch_one(pool)
     .await?;
 
-    let rate_str: String = row.rate_to_base; 
-    
-    // manully convert String to Decimal
-    let decimal_rate = Decimal::from_str(&rate_str)
-        .map_err(|e| {
-            sqlx::Error::Decode(Box::new(e))
-        })?;
+    let rate_str: String = row.get("rate_to_base");
 
-    Ok(decimal_rate)
+    Decimal::from_str(&rate_str)
+        .map_err(|e| sqlx::Error::Decode(Box::new(e)))
 }
 
 pub async fn insert_rate(
@@ -599,15 +598,16 @@ pub async fn insert_rate(
     currency: &str,
     rate: f64
 ) -> Result<(), sqlx::Error> {
-    sqlx::query!(
+    sqlx::query(
         r#"
         INSERT INTO currency_rates (currency, rate_to_base)
         VALUES (?, ?)
-        ON CONFLICT(currency) DO UPDATE SET rate_to_base = excluded.rate_to_base
-        "#,
-        currency,
-        rate
+        ON CONFLICT(currency)
+        DO UPDATE SET rate_to_base = excluded.rate_to_base
+        "#
     )
+    .bind(currency)
+    .bind(rate)
     .execute(pool)
     .await?;
 
@@ -620,22 +620,26 @@ pub async fn monthly_summary(
     start: &NaiveDateTime,
     end: &NaiveDateTime
 ) -> Result<Vec<(i64, f64)>, sqlx::Error> {
-    let rows = sqlx::query!(
+    let rows = sqlx::query(
         r#"
-        SELECT category_id, SUM(base_amount) as total
+        SELECT category_id, SUM(base_amount) AS total
         FROM transactions
         WHERE trans_create_at BETWEEN ? AND ?
         GROUP BY category_id
-        "#,
-        start,
-        end
+        "#
     )
+    .bind(start)
+    .bind(end)
     .fetch_all(pool)
     .await?;
 
     Ok(rows
         .into_iter()
-        .map(|r| (r.category_id, r.total))
+        .map(|r| {
+            let category_id: i64 = r.get("category_id");
+            let total: f64 = r.get("total");
+            (category_id, total)
+        })
         .collect())
 }
 
@@ -669,13 +673,16 @@ pub async fn seed_fixed_categories(pool: &Pool<Sqlite>) -> Result<(), sqlx::Erro
     ];
 
     for (id, name, cat_type) in categories {
-        sqlx::query!(
+        sqlx::query(
             r#"
-            INSERT OR IGNORE INTO categories (category_id, category_name, category_type, icon)
+            INSERT OR IGNORE INTO categories
+            (category_id, category_name, category_type, icon)
             VALUES (?, ?, ?, '')
-            "#,
-            id, name, cat_type
+            "#
         )
+        .bind(id)
+        .bind(name)
+        .bind(cat_type)
         .execute(pool)
         .await?;
     }
