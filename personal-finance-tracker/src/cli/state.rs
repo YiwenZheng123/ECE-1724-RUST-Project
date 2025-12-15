@@ -4,7 +4,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 use crate::cli::api::Client;
-
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AccountType {
@@ -279,10 +279,25 @@ impl App {
         Ok(())
     }
 
-    pub async fn refresh_dashboard(&mut self) -> anyhow::Result<()> {
+   pub async fn refresh_dashboard(&mut self) -> anyhow::Result<()> {
         self.dashboard.loading = true;
+        
+      
         let goals = self.api.list_goals().await.unwrap_or_default();
+      
         let report = self.api.get_monthly_report().await.unwrap_or_default();
+
+      
+        if report.is_empty() {
+             self.status = format!("Dashboard loaded. GOALS: {}, REPORT: 0 (Empty)", goals.len());
+        } else {
+             
+             self.status = format!("Report: {} items. First: {} = {}", 
+                report.len(), 
+                report[0].category, 
+                report[0].total_amount.0
+            );
+        }
 
         self.dashboard.goals = goals;
         self.dashboard.report = report;
@@ -461,6 +476,9 @@ impl App {
                                 } else {
                                     self.status = "Account deleted.".to_string();
                                     self.refresh_accounts().await.ok();
+                                    self.txn.table.clear(); 
+                                    self.txn.tsel.select(None);
+
                                     let len = self.accounts.list.len(); 
                                     if len > 0 {
                                         self.accounts.sel.select(Some(len - 1));
@@ -872,7 +890,13 @@ impl App {
                         KeyCode::Char('n') => {
                             self.dashboard.creating = true;
                             self.dashboard.editing_id = None; 
-                            self.dashboard.form = GoalForm::default();
+                            let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+
+                            self.dashboard.form = GoalForm {
+                                deadline: today,      
+                                editing: Some(GoalField::Name), 
+                                ..Default::default()   
+                            };
                             self.dashboard.form.editing = Some(GoalField::Name);
                         }
 
@@ -1011,7 +1035,7 @@ impl App {
                 self.add.memo.clear();
                 self.add.payee.clear();
                 self.add.editing_txn_id = None;
-                
+                self.refresh_dashboard().await.ok();
                 self.refresh_txns().await.ok();
                 self.refresh_accounts().await.ok();
                 
@@ -1027,58 +1051,97 @@ impl App {
     } 
 
     pub async fn submit_goal(&mut self) -> anyhow::Result<()> {
-        let name = self.dashboard.form.name.trim();
+        let name = self.dashboard.form.name.trim().to_string();
         if name.is_empty() {
             self.dashboard.form.error = Some("Name cannot be empty".into());
             return Ok(());
         }
 
-        let target_str = self.dashboard.form.target.trim();
-       
-        let target_dec = if target_str.is_empty() { Decimal::ZERO } else { Decimal::from_str_exact(target_str).unwrap_or(Decimal::ZERO) };
-
-        let current_str = self.dashboard.form.current.trim();
-        
-        let current_dec = if current_str.is_empty() { Decimal::ZERO } else { Decimal::from_str_exact(current_str).unwrap_or(Decimal::ZERO) };
-
-      
-        let date_str = self.dashboard.form.deadline.trim();
-        let deadline_opt = if date_str.is_empty() {
-            None
+       let valid_account_id = if let Some(id) = self.current_account_id() {
+            id
         } else {
-            match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
-                Ok(d) => Some(d.and_hms_opt(0,0,0).unwrap()),
+            if self.accounts.list.is_empty() {
+                self.refresh_accounts().await.ok();
+            }
+            
+            if let Some(first_acc) = self.accounts.list.first() {
+                first_acc.id
+            } else {
+                self.dashboard.form.error = Some("No account found! Create one first.".into());
+                return Ok(());
+            }
+        };
+
+        let target_str = self.dashboard.form.target.trim();
+        let target_dec = if target_str.is_empty() {
+            Decimal::ZERO 
+        } else {
+            match Decimal::from_str(target_str) { 
+                Ok(d) => d,
                 Err(_) => {
-                    self.dashboard.form.error = Some("Date must be YYYY-MM-DD".into());
+                    self.dashboard.form.error = Some("Invalid target amount".into());
                     return Ok(());
                 }
             }
         };
 
-       
+    
+        let current_str = self.dashboard.form.current.trim();
+        let current_dec = if current_str.is_empty() {
+            Decimal::ZERO
+        } else {
+            match Decimal::from_str(current_str) {
+                Ok(d) => d,
+                Err(_) => {
+                    self.dashboard.form.error = Some("Invalid current amount".into());
+                    return Ok(());
+                }
+            }
+        };
+
+    
+        let date_str = self.dashboard.form.deadline.trim();
+        let deadline_opt = if date_str.is_empty() {
+            None
+        } else {
+            match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                Ok(d) => Some(d.and_hms_opt(0, 0, 0).unwrap()),
+                Err(_) => {
+                    self.dashboard.form.error = Some("Date format must be YYYY-MM-DD".into());
+                    return Ok(());
+                }
+            }
+        };
+
         let req = crate::cli::api::CreateGoalReq {
-            account_id: 1, 
+            account_id: valid_account_id, 
             name: name.to_string(),
             target_amount: Money(target_dec),
             current_amount: Money(current_dec),
             deadline: deadline_opt,
         };
 
-      
-        if let Some(id) = self.dashboard.editing_id {
-          
-            self.api.update_goal(id, &req).await?; 
+    
+        let result = if let Some(id) = self.dashboard.editing_id {
+            self.api.update_goal(id, &req).await
         } else {
-           
-            self.api.create_goal(&req).await?; 
+            self.api.create_goal(&req).await
+        };
+
+        match result {
+            Ok(_) => {
+                
+                self.dashboard.creating = false;
+                self.dashboard.editing_id = None;
+                self.refresh_goals().await.ok();
+                self.status = "Goal saved successfully.".into();
+            }
+            Err(e) => {
+                
+                self.dashboard.form.error = Some(format!("Failed to save: {}", e));
+            }
         }
-       
-        self.dashboard.creating = false;
-        self.dashboard.editing_id = None; 
-        self.refresh_goals().await.ok();
-        self.status = "Goal saved.".into();
 
         Ok(())
     }
-} 
-    
+}

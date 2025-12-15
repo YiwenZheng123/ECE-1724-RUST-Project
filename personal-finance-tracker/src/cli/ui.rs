@@ -532,6 +532,7 @@ pub fn ui_dashboard(f: &mut Frame, page: &DashboardPage, area: Rect) {
         return;
     }
 
+   
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
@@ -544,33 +545,44 @@ pub fn ui_dashboard(f: &mut Frame, page: &DashboardPage, area: Rect) {
     if page.goals.is_empty() {
         f.render_widget(Paragraph::new("No goals set (Press 'n' to add)").alignment(Alignment::Center), left_area);
     } else {
-        let rows = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(vec![Constraint::Length(3); page.goals.len()])
-            .split(left_area);
+        let max_items = (left_area.height / 3) as usize;
+        let visible_count = page.goals.len().min(max_items);
 
-        for (i, goal) in page.goals.iter().enumerate() {
-            if i >= rows.len() { break; }
-            let current = goal.current_amount.0.to_f64().unwrap_or(0.0);
-            let target = goal.target_amount.0.to_f64().unwrap_or(1.0);
-            let ratio = (current / target).clamp(0.0, 1.0);
-            let percent = (ratio * 100.0) as u16;
+        if visible_count > 0 {
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(vec![Constraint::Length(3); visible_count])
+                .split(left_area);
 
-            let is_selected = i == page.selected_index;
-            let label_color = if is_selected { Color::Yellow } else { Color::White };
-            let prefix = if is_selected { "> " } else { "  " };
+            for (i, goal) in page.goals.iter().take(visible_count).enumerate() {
+                let current = goal.current_amount.0.to_f64().unwrap_or(0.0);
+                let target = goal.target_amount.0.to_f64().unwrap_or(1.0);
+                let ratio = (current / target).clamp(0.0, 1.0);
+                let percent = (ratio * 100.0) as u16;
 
-            let label = format!("{}{}: {}/{} ({:.0}%)", prefix, goal.name, goal.current_amount.0, goal.target_amount.0, ratio * 100.0);
+                let is_selected = i == page.selected_index;
+                let (label_color, label_mod) = if is_selected { 
+                    (Color::Yellow, Modifier::BOLD) 
+                } else { 
+                    (Color::White, Modifier::empty()) 
+                };
+                let prefix = if is_selected { "> " } else { "  " };
 
-           
-            let gauge = Gauge::default()
-                .block(Block::default().borders(Borders::NONE))
-                .gauge_style(Style::default().fg(Color::Green)) 
-                .style(Style::default().fg(label_color))       
-                .percent(percent)
-                .label(Span::styled(label, Style::default().fg(label_color).add_modifier(Modifier::BOLD)));
+                let label = format!("{}{}: {}/{} ({:.0}%)", prefix, goal.name, goal.current_amount.0, goal.target_amount.0, ratio * 100.0);
 
-            f.render_widget(gauge, rows[i]);
+                let gauge = Gauge::default()
+                    .block(Block::default().borders(Borders::NONE))
+                    .gauge_style(Style::default().fg(Color::Green)) 
+                    .style(Style::default().fg(label_color))       
+                    .percent(percent)
+                    .label(Span::styled(label, Style::default().fg(label_color).add_modifier(label_mod)));
+
+                f.render_widget(gauge, rows[i]);
+            }
+        }
+        
+     
+        if page.goals.len() > max_items {
         }
     }
 
@@ -578,28 +590,32 @@ pub fn ui_dashboard(f: &mut Frame, page: &DashboardPage, area: Rect) {
     let right_area = right_block.inner(chunks[1]);
     f.render_widget(right_block, chunks[1]);
 
-    // let bar_data: Vec<(&str, u64)> = page.report.iter()
-    //     .map(|r| (r.category.as_str(), r.total_amount.0.to_u64().unwrap_or(0)))
-    //     .collect();
+    if page.report.is_empty() {
+        let msg = "No spending data for this month.\n\nGo to 'Transactions' tab\nand add an 'Expense'.";
+        let p = Paragraph::new(msg)
+            .style(Style::default().fg(Color::DarkGray))
+            .alignment(Alignment::Center);
+        f.render_widget(p, right_area);
+    } else {
+        let labels: Vec<String> = page.report.iter()
+            .map(|r| format!("{} ${}", r.category, r.total_amount.0)) 
+            .collect();
 
-    let labels: Vec<String> = page.report.iter()
-        .map(|r| format!("{} ${}", r.category, r.total_amount.0)) 
-        .collect();
+        let bar_data: Vec<(&str, u64)> = page.report.iter()
+            .zip(labels.iter()) 
+            .map(|(r, label)| (
+                label.as_str(), 
+                r.total_amount.0.to_u64().unwrap_or(0) 
+            ))
+            .collect();
 
-    let bar_data: Vec<(&str, u64)> = page.report.iter()
-        .zip(labels.iter()) 
-        .map(|(r, label)| (
-            label.as_str(), 
-            r.total_amount.0.to_u64().unwrap_or(0) 
-        ))
-        .collect();
-
-    let barchart = BarChart::default()
-        .data(&bar_data)
-        .bar_width(15)
-        .bar_gap(2)
-        .style(Style::default().fg(Color::Yellow))
-        .value_style(Style::default().bg(Color::Yellow).fg(Color::Black));
-    
-    f.render_widget(barchart, right_area);
+        let barchart = BarChart::default()
+            .data(&bar_data)
+            .bar_width(12) 
+            .bar_gap(2)
+            .style(Style::default().fg(Color::Yellow))
+            .value_style(Style::default().bg(Color::Yellow).fg(Color::Black));
+        
+        f.render_widget(barchart, right_area);
+    }
 }

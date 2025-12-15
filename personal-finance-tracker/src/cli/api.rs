@@ -274,17 +274,18 @@ impl Client {
     pub async fn create_transaction(&self, req: &CreateTxnReq) -> Result<TransactionDto> {
         let is_expense = if req.amount.0.is_sign_negative() { 1 } else { 0 };
         let amount_abs = req.amount.0.abs().to_string();
-        let date_str = req.transacted_at.format("%Y-%m-%dT%H:%M:%S").to_string();
+        
+        // 1. 不需要手动 format date_str 了，直接用 req.transacted_at，
+        // 这样能保证和 update_transaction 存入的格式完全一致 (YYYY-MM-DD HH:MM:SS)
 
         let mut tx = self.pool.begin().await?;
 
-        let row = sqlx::query(
+        // 2. 修改 SQL：去掉 RETURNING，改用 execute，这是最稳妥的写入方式
+        let res = sqlx::query(
             r#"
             INSERT INTO transactions
               (account_id, category_id, amount, base_amount, is_expense, description, payee, currency, transacted_at, trans_create_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-            RETURNING
-              transaction_id, account_id, category_id, amount, is_expense, description, payee, currency, transacted_at
             "#
         )
         .bind(req.account_id)
@@ -295,27 +296,27 @@ impl Client {
         .bind(req.description.as_deref())
         .bind(req.payee.as_deref())
         .bind(&req.currency)
-        .bind(&date_str)
-        .fetch_one(&mut *tx)
+        .bind(req.transacted_at) // <--- 关键修改：直接绑定对象，不要传 String
+        .execute(&mut *tx)       // <--- 关键修改：使用 execute 而不是 fetch_one
         .await?;
 
+        // 3. 手动获取新插入的 ID
+        let new_id = res.last_insert_rowid();
+
+        // 4. 更新余额并提交事务
         self.recompute_balance_exec(&mut *tx, req.account_id).await?;
         tx.commit().await?;
 
-        let amount_s: String = row.try_get("amount")?;
-        let is_expense_i: i64 = row.try_get("is_expense")?;
-        let mut amt = Decimal::from_str_exact(&amount_s).unwrap_or(Decimal::ZERO);
-        if is_expense_i != 0 { amt = -amt; }
-
+        // 5. 构造一个返回对象 (虽然 App 端其实丢弃了这个返回值，但为了满足函数签名，我们构造一个)
         Ok(TransactionDto {
-            id: row.try_get("transaction_id")?,
-            account_id: row.try_get("account_id")?,
-            category_id: row.try_get("category_id")?,
-            amount: Money(amt),
-            memo: row.try_get("description")?,
-            payee: row.try_get("payee")?,
-            currency: row.try_get::<Option<String>, _>("currency")?.unwrap_or("CAD".into()),
-            txn_date: parse_date_any(&row.try_get::<String, _>("transacted_at")?),
+            id: new_id,
+            account_id: req.account_id,
+            category_id: Some(req.category_id),
+            amount: req.amount.clone(),
+            memo: req.description.clone(),
+            payee: req.payee.clone(),
+            currency: req.currency.clone(),
+            txn_date: req.transacted_at.date(),
             cleared: false,
             reconciled: false,
         })
