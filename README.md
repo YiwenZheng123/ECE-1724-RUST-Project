@@ -50,14 +50,14 @@ The project is designed to be completed within the course timeframe and has mult
 
 This application is a terminal-based personal finance tracker built with Rust. It features a modal-based TUI (Text User Interface) for managing accounts, tracking transactions, and visualizing financial health. All hot keys should exactly match the one in the Guide (lower case keys).
 
-#### **Global Navigation**
+### **Global Navigation**
 
 * **Launch**: Run ```cargo run``` in the terminal to start the application.
 * **Switch Tabs**: Press `Tab` to cycle through the main views: `Accounts`, `Transactions`, `Add Transaction`, and `Dashboard`.
 * **Help**: Press `?` at any time to toggle the keybindings overlay.
 * **Quit**: Press `q` to exit the application.
 
-#### **Accounts Tab (Default View)**
+### **Accounts Tab (Default View)**
 
 This tab lists all financial accounts and their current balances.
 
@@ -73,7 +73,7 @@ This tab lists all financial accounts and their current balances.
 * **Select Account**: Press `Enter` on a highlighted account to view its transactions.
 * **Go to Dashboard:** Press `g` to direct to the Dashboard tab to manage Saving Goals and view Financial Reports.
 
-#### **Transactions Tab**
+### **Transactions Tab**
 
 Displays the ledger for the currently selected account.
 
@@ -83,7 +83,7 @@ Displays the ledger for the currently selected account.
 * **Delete Transaction**: Press `d` or `Delete` to remove the selected transaction.
 * **Back**: Press `Esc` to return to the Accounts list.
 
-#### **Add / Edit Transaction Tab**
+### **Add / Edit Transaction Tab**
 
 This screen features a **Data Entry Form** (left) and a **Category Selection List** (right).
 
@@ -100,7 +100,7 @@ This screen features a **Data Entry Form** (left) and a **Category Selection Lis
 * **Save**: Press `Ctrl + s` to save the transaction to the database.
 * **Cancel**: Press `Esc` to clear the form or return to the previous view.
 
-#### **Dashboard Tab**
+### **Dashboard Tab**
 
 Displays a ***Saving Goals List*** (left) and a ***Finance Report Form*** (right).
 
@@ -118,7 +118,7 @@ Displays a ***Saving Goals List*** (left) and a ***Finance Report Form*** (right
 * **Back**: Press `Esc` to return to the Accounts list.
 * **Cancel**: Press `Esc` to clear the form or return to the previous view.
 
-#### **Add / Edit Saving Goal Tab**
+### **Add / Edit Saving Goal Tab**
 
 This screen features a **Data Entry Form**.
 
@@ -136,18 +136,18 @@ This screen features a **Data Entry Form**.
 
 ## Reproducibility Guide
 
-#### **Getting Started: Your Rust Adventure\!**
+### **Getting Started: Your Rust Adventure\!**
 
 To ensure the application runs correctly on a fresh environment, please follow the steps below in order. These commands will set up the necessary dependencies, configure the environment variables, initialize the local SQLite database, and launch the application.
 
-#### **Prerequisites:**
+### **Prerequisites:**
 
 * Ensure **Rust** and **Cargo** are installed on the system.
 * Ensure **SQLite** is installed (typically pre-installed on macOS and most Linux distributions).
 
 ***Haven't installed Rust and SQLite? No worries, [here](#install-rust--cargo) are the steps to load up Cargo\!***
 
-#### **Step 0: Project Setup**
+### **Step 0: Project Setup**
 
 Clone the Repository:
 
@@ -161,15 +161,15 @@ Direct to the project folder:
 cd personal-finance-tracker
 ```
 
-#### **Step 1: Install SQLx Command Line Tool**
+### **Step 1: Install SQLx Command Line Tool**
 
-The project relies on the `sqlx-cli` tool to manage database creation and migrations. Run the following command to install it with SQLite support:
+The project relies on the `sqlx-cli` tool to manage database creation and migrations. Run the following command to install it with ***SQLite*** support:
 
 ```Bash
 cargo install sqlx-cli --no-default-features --features sqlite()`
 ```
 
-#### **Step 2: Initialize and Migrate the Database**
+### **Step 2: Initialize and Migrate the Database**
 
 Run the following commands to create the database file and apply the SQL migrations (which set up the table schema and default data):
 
@@ -177,7 +177,7 @@ Run the following commands to create the database file and apply the SQL migrati
 cargo sqlx migrate run
 ```
 
-#### **Step 3: Build and Run the Application**
+### **Step 3: Build and Run the Application**
 
 Finally, with everything installed, you can now build and run the application.
 
@@ -186,7 +186,7 @@ cargo build
 cargo run
 ```
 
-###### **Problems:**
+#### **Problems:**
 
 If you have encountered a database connection problem check the following notes.
 
@@ -204,9 +204,7 @@ If you have encountered a database connection problem check the following notes.
 If the build is successful, the application will start, and you are ready to go\!
 
 
-##### 
-
-#### Install Rust & Cargo
+### Install Rust & Cargo
 
 * Rust is installed via rustup, which is the official toolchain installer.
 * Run the installation script:
@@ -227,7 +225,7 @@ If the build is successful, the application will start, and you are ready to go\
 
 **Database Setup (SQLite)**
 
-This project uses SQLite by default, which is an embedded database.
+This project uses ***SQLite**** by default, which is an embedded database.
 
 * Install SQLite. Run the installation script:
   * **macOS:**
@@ -235,8 +233,8 @@ This project uses SQLite by default, which is an embedded database.
   * **Ubuntu:**
   `sudo apt update && sudo apt install -y sqlite3 libsqlite3-dev`
   * **Windows:**
-  Download from sqlite3 website: [https://sqlite.org/download.html](https://sqlite.org/download.html)
-  Select [sqlite-tools-win-x64-3510100.zip](https://sqlite.org/2025/sqlite-tools-win-x64-3510100.zip) or choose based on your system.
+      * Download from sqlite3 website: [https://sqlite.org/download.html](https://sqlite.org/download.html)
+      * Select [sqlite-tools-win-x64-3510100.zip](https://sqlite.org/2025/sqlite-tools-win-x64-3510100.zip) or choose based on your system.
 * Open your System Environment Variables: `Path → Edit → Add` your path of  the directory where contains the `.exe` files. For example:`C:\\sqlite3`
 * Click `Save` to all windows. Then reopen a new terminal
 * **Verify Installation:**
