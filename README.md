@@ -183,7 +183,7 @@ cd personal-finance-tracker
 The project relies on the `sqlx-cli` tool to manage database creation and migrations. Run the following command to install it with ***SQLite*** support:
 
 ```Bash
-cargo install sqlx-cli --no-default-features --features sqlite()`
+cargo install sqlx-cli --no-default-features --features sqlite
 ```
 
 ### **Step 2: Initialize and Migrate the Database**
@@ -209,7 +209,7 @@ If you have encountered a database connection problem check the following notes.
 
 * The application uses a `.env` file to define the database connection string. Since this file is excluded from version control for security, it must be created manually in the project root directory. Run the following command:
   
-  ` echo "DATABASE_URL=sqlite://finance_tracker.db" > .env`
+  `echo "DATABASE_URL=sqlite://finance_tracker.db" > .env`
 * Recreate the database:
   
   ```Bash
@@ -235,10 +235,10 @@ If the build is successful, the application will start, and you are ready to go\
   ```
 * Verify Installation: Check that both the Rust compiler (rustc) and the package manager (cargo) are installed:
 
-```Bash
-    rustc --version 	# e.g., rustc 1.90.0
-    cargo --version 	# e.g., cargo 1.90.0
-```
+   ```Bash
+   rustc --version 	# e.g., rustc 1.90.0
+   cargo --version 	# e.g., cargo 1.90.0
+   ```
 
 **Database Setup (SQLite)**
 
