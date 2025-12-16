@@ -5,6 +5,23 @@
 > * Yuhan Cui (1005982661) yuhan.cui@mail.utoronto.ca
 > * Tianchen Lan(1006285495) bruce.lan@mail.utoronto.ca
 
+## 📖 Table of Contents
+
+* [1. Motivation](#1-项目简介)
+* [2. Objective and Key Features](#2-安装指南)
+* [3. User’s Guide](#3-users-guide)
+    * [3.1 Global Navigation](#31-global-navigation)
+    * [3.2 Accounts Tab](#32-accounts-tab-default-view)
+    * [3.3 Transactions Tab](#33-transactions-tab)
+    * [3.4 Add / Edit Transaction Tab](#34-add--edit-transaction-tab)
+    * [3.5 Dashboard Tab](#35-dashboard-tab)
+    * [3.6 Add / Edit Saving Goal Tab](#36-add--edit-saving-goal-tab)
+* [4. Reproducibility Guide](#4-reproducibility-guide)
+* [5. Contributions](#5-contributions)
+* [6. Lessons We Learned](#6-lessons-we-learned)
+* [7. Contributions](#7-videos)
+
+
 ## 1. Motivation
 
 Personal finance tools are either web applications that trade privacy for convenience or lightweight CLI utilities that remain at the level of logging. What we want is something in between: a fast, distraction-free terminal experience with strict accounting  and the reliability of a secure, self-hosted backend.
@@ -50,14 +67,14 @@ The project is designed to be completed within the course timeframe and has mult
 
 This application is a terminal-based personal finance tracker built with Rust. It features a modal-based TUI (Text User Interface) for managing accounts, tracking transactions, and visualizing financial health. All hot keys should exactly match the one in the Guide (lower case keys).
 
-### **Global Navigation**
+### **3.1 Global Navigation**
 
 * **Launch**: Run ```cargo run``` in the terminal to start the application.
 * **Switch Tabs**: Press `Tab` to cycle through the main views: `Accounts`, `Transactions`, `Add Transaction`, and `Dashboard`.
 * **Help**: Press `?` at any time to toggle the keybindings overlay.
 * **Quit**: Press `q` to exit the application.
 
-### **Accounts Tab (Default View)**
+### **3.2 Accounts Tab (Default View)**
 
 This tab lists all financial accounts and their current balances.
 
@@ -73,7 +90,7 @@ This tab lists all financial accounts and their current balances.
 * **Select Account**: Press `Enter` on a highlighted account to view its transactions.
 * **Go to Dashboard:** Press `g` to direct to the Dashboard tab to manage Saving Goals and view Financial Reports.
 
-### **Transactions Tab**
+### **3.3 Transactions Tab**
 
 Displays the ledger for the currently selected account.
 
@@ -83,7 +100,7 @@ Displays the ledger for the currently selected account.
 * **Delete Transaction**: Press `d` or `Delete` to remove the selected transaction.
 * **Back**: Press `Esc` to return to the Accounts list.
 
-### **Add / Edit Transaction Tab**
+### **3.4 Add / Edit Transaction Tab**
 
 This screen features a **Data Entry Form** (left) and a **Category Selection List** (right).
 
@@ -100,7 +117,7 @@ This screen features a **Data Entry Form** (left) and a **Category Selection Lis
 * **Save**: Press `Ctrl + s` to save the transaction to the database.
 * **Cancel**: Press `Esc` to clear the form or return to the previous view.
 
-### **Dashboard Tab**
+### **3.5 Dashboard Tab**
 
 Displays a ***Saving Goals List*** (left) and a ***Finance Report Form*** (right).
 
@@ -118,7 +135,7 @@ Displays a ***Saving Goals List*** (left) and a ***Finance Report Form*** (right
 * **Back**: Press `Esc` to return to the Accounts list.
 * **Cancel**: Press `Esc` to clear the form or return to the previous view.
 
-### **Add / Edit Saving Goal Tab**
+### **3.6 Add / Edit Saving Goal Tab**
 
 This screen features a **Data Entry Form**.
 
@@ -134,7 +151,7 @@ This screen features a **Data Entry Form**.
 * **Delete Goal:** Press `d`. A warning modal will appear; press `y` or `Enter` to confirm deletion.
 * **Cancel:** Press `Esc` to return to the previous view.
 
-## Reproducibility Guide
+## 4. Reproducibility Guide
 
 ### **Getting Started: Your Rust Adventure\!**
 
@@ -242,7 +259,7 @@ This project uses ***SQLite**** by default, which is an embedded database.
   sqlite3 --version
   ```
 
-## Contributions
+## 5. Contributions
 
 ### Tianchen Lan:
 
@@ -306,7 +323,7 @@ This project uses ***SQLite**** by default, which is an embedded database.
 * Verified the feasibility of the Reproducibility procedure.
 * Completed the recording of the video slide presentation of project design and outcomes.
 
-## Lessons We Learned
+## 6. Lessons We Learned
 
 Throughout the development of this personal finance tracker, our team gained significant insights into systems programming, asynchronous architectures, and collaborative software development.
 
@@ -321,7 +338,7 @@ Throughout the development of this personal finance tracker, our team gained sig
 
 Overall, this project was a great opportunity to build a complete application from scratch. We successfully created a functional finance tracker that ensures data privacy by running locally. While Rust was challenging to learn, we now appreciate its performance and safety features. We are proud of the final result and the teamwork it took to get here.
 
-## Videos:
+## 7. Videos:
 
 [Video Demo](https://youtu.be/uA57o_QmwnU)
 
