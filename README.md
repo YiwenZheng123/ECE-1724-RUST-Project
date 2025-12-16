@@ -19,7 +19,7 @@
 * [4. Reproducibility Guide](#4-reproducibility-guide)
 * [5. Contributions](#5-contributions)
 * [6. Lessons We Learned](#6-lessons-we-learned)
-* [7. Contributions](#7-videos)
+* [7. Videos](#7-videos)
 
 
 ## 1. Motivation
