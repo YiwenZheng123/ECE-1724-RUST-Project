@@ -1,5 +1,8 @@
 # ECE-1724-RUST-Project
-> Team: Tianchen Lan(1006285495)/ Yuhan Cui (1005982661) / Yiwen Zheng (1005986293)
+> Team: 
+  Yiwen Zheng (1005986293)
+  Yuhan Cui (1005982661) yuhan.cui@mail.utoronto.ca
+  Tianchen Lan(1006285495) bruce.lan@mail.utoronto.ca
  
 ## 1. Motivation
 Personal finance tools are either web applications that trade privacy for convenience or lightweight CLI utilities that remain at the level of logging. What we want is something in between: a fast, distraction-free terminal experience with strict accounting  and the reliability of a secure, self-hosted backend.
