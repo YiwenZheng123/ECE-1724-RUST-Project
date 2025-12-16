@@ -7,8 +7,8 @@
 
 ## 📖 Table of Contents
 
-* [1. Motivation](#1-项目简介)
-* [2. Objective and Key Features](#2-安装指南)
+* [1. Motivation](#1-motivation)
+* [2. Objective and Key Features](#2-objective-and-key-features)
 * [3. User’s Guide](#3-users-guide)
     * [3.1 Global Navigation](#31-global-navigation)
     * [3.2 Accounts Tab](#32-accounts-tab-default-view)
