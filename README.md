@@ -1,9 +1,9 @@
 # ECE-1724-RUST-Project
 
 > Team:
-> Yiwen Zheng (1005986293) yiwen.zheng@mail.utoronto.ca
-> Yuhan Cui (1005982661) yuhan.cui@mail.utoronto.ca
-> Tianchen Lan(1006285495) bruce.lan@mail.utoronto.ca
+> * Yiwen Zheng (1005986293) yiwen.zheng@mail.utoronto.ca
+> * Yuhan Cui (1005982661) yuhan.cui@mail.utoronto.ca
+> * Tianchen Lan(1006285495) bruce.lan@mail.utoronto.ca
 
 ## 1. Motivation
 
@@ -145,7 +145,7 @@ To ensure the application runs correctly on a fresh environment, please follow t
 * Ensure **Rust** and **Cargo** are installed on the system.
 * Ensure **SQLite** is installed (typically pre-installed on macOS and most Linux distributions).
 
-***Haven't installed Rust and SQLite? No worries, [here](#install-rust-cargo) are the steps to load up Cargo\!***
+***Haven't installed Rust and SQLite? No worries, [here](#install-rust--cargo) are the steps to load up Cargo\!***
 
 #### **Step 0: Project Setup**
 
@@ -230,12 +230,12 @@ If the build is successful, the application will start, and you are ready to go\
 This project uses SQLite by default, which is an embedded database.
 
 * Install SQLite. Run the installation script:
-  **macOS:**
+  * **macOS:**
   ```brew install sqlite```
-  **Ubuntu:**
+  * **Ubuntu:**
   `sudo apt update && sudo apt install -y sqlite3 libsqlite3-dev`
-  **Windows:**
-  Download from sqlite3 website:[https://sqlite.org/download.html](https://sqlite.org/download.html)
+  * **Windows:**
+  Download from sqlite3 website: [https://sqlite.org/download.html](https://sqlite.org/download.html)
   Select [sqlite-tools-win-x64-3510100.zip](https://sqlite.org/2025/sqlite-tools-win-x64-3510100.zip) or choose based on your system.
 * Open your System Environment Variables: `Path → Edit → Add` your path of  the directory where contains the `.exe` files. For example:`C:\\sqlite3`
 * Click `Save` to all windows. Then reopen a new terminal
@@ -246,7 +246,7 @@ This project uses SQLite by default, which is an embedded database.
 
 ## Contributions
 
-##### Tianchen Lan:
+### Tianchen Lan:
 
 **1\. Independently Developed**
 
@@ -269,7 +269,7 @@ This project uses SQLite by default, which is an embedded database.
 * **App Persistence:** Worked on the application initialization flow to ensure data is saved and loaded correctly on restart (removing the "wipe on start" behavior).
 * **System Consistency:** Integrated dashboard shortcuts into the global Help page and Navigation bar to match the team's design style.
 
-##### Yiwen Zheng:
+### Yiwen Zheng:
 
 **1\. Independently Developed**
 
@@ -291,7 +291,7 @@ This project uses SQLite by default, which is an embedded database.
 * **Database Persistence:** Connected the frontend forms to the shared database backend, ensuring that **`Ctrl+s`** triggers the correct SQL insert/update commands.
 * **UX Consistency:** Standardized the keyboard shortcut scheme (arrow keys for navigation, `Esc` for back/cancel) to match the navigation patterns used in the Dashboard module.
 
-##### Yuhan Cui:
+### Yuhan Cui:
 
 **1\. Independently Developed**
 
